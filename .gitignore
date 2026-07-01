@@ -1,0 +1,6 @@
+node_modules/
+*.log
+_test-*.sqlite
+_test-*.log
+.env
+public/assets/trace-genealogy-bg.png

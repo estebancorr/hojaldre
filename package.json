@@ -1,0 +1,14 @@
+{
+  "name": "pan-de-tata-trazabilidad",
+  "version": "1.0.0",
+  "description": "MVP local para simular trazabilidad de produccion de hojaldre en Pan de Tata.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "seed": "node db/seed.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "sql.js": "^1.13.0"
+  }
+}

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pan de Tata | Trazabilidad</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <strong>Pan de Tata</strong>
+        <span>Trazabilidad</span>
+      </div>
+      <nav>
+        <button class="nav active" data-view="dashboard">Inicio</button>
+        <button class="nav" data-view="materias">MP</button>
+        <button class="nav" data-view="preparaciones">Preparaciones</button>
+        <button class="nav" data-view="ordenes">Ordenes</button>
+        <button class="nav" data-view="trazabilidad">Trazabilidad</button>
+        <button class="nav" data-view="calidad">Control calidad</button>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Inicio</h1>
+          <p id="status">Listo</p>
+        </div>
+        <button id="refresh" class="secondary">Actualizar</button>
+      </header>
+
+      <section id="dashboard" class="view active"></section>
+
+      <section id="materias" class="view">
+        <div class="tabs" data-tabs="mp">
+          <button class="tab active" data-panel="mp-materias">Materias primas</button>
+          <button class="tab" data-panel="mp-proveedores">Proveedores</button>
+        </div>
+
+        <div id="mp-proveedores" class="tab-panel">
+          <form id="proveedor-form" class="panel">
+            <h2>Proveedor</h2>
+            <label>Nombre <input name="nombre" required></label>
+            <label>Contacto <input name="contacto"></label>
+            <label>Telefono <input name="telefono"></label>
+            <label>Email <input name="email" type="email"></label>
+            <button>Guardar proveedor</button>
+          </form>
+          <div class="panel">
+            <h2>Proveedores registrados</h2>
+            <div id="tabla-proveedores"></div>
+          </div>
+        </div>
+
+        <div id="mp-materias" class="tab-panel active">
+          <form id="materia-form" class="panel">
+            <h2>Registrar materia prima</h2>
+            <div class="form-grid">
+              <label>Nombre <input name="nombre" required></label>
+              <label>Unidad <input name="unidad_medida" placeholder="kg" required></label>
+              <label>Temperatura objetivo <input name="temperatura_objetivo" type="number" step="0.01"></label>
+            </div>
+            <label>Descripcion <textarea name="descripcion"></textarea></label>
+            <button>Guardar materia prima</button>
+          </form>
+
+          <div class="panel">
+            <h2>Materias primas disponibles</h2>
+            <div id="tabla-materias"></div>
+          </div>
+
+          <form id="lote-mp-form" class="panel">
+            <h2>Lote de materia prima</h2>
+            <div class="form-grid">
+              <label>Materia prima <select name="id_materia_prima" id="lote-mp-materia" required></select></label>
+              <label>Proveedor <select name="id_proveedor" id="lote-mp-proveedor" required></select></label>
+              <label>Lote proveedor <input name="lote_proveedor" required></label>
+              <label>Fecha recepcion <input name="fecha_recepcion" type="date" required></label>
+              <label>Fecha vencimiento <input name="fecha_vencimiento" type="date"></label>
+              <label>Peso recibido <input name="peso_recibido" type="number" step="0.001" required></label>
+            </div>
+            <label>Observaciones <textarea name="observaciones"></textarea></label>
+            <button>Guardar lote</button>
+          </form>
+
+          <div class="panel">
+            <h2>Lotes materia prima</h2>
+            <div id="tabla-mp"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="preparaciones" class="view">
+        <form id="stock-form" class="panel wide">
+          <div class="form-heading">
+            <h2>Generar lote para stock general</h2>
+            <span class="badge">ST | Sin orden</span>
+          </div>
+          <div class="form-grid stock-grid">
+            <label>Resultado <select name="id_tipo_preparacion" id="stock-tipo" required></select></label>
+            <label>Peso total resultante (kg) <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
+          </div>
+          <div class="origins-head">
+            <div>
+              <h3>Lotes que se unen</h3>
+              <small id="stock-origin-total" class="muted">Total seleccionado: 0 kg</small>
+            </div>
+            <button type="button" id="add-stock-origin" class="secondary">Agregar lote</button>
+          </div>
+          <div id="stock-origenes"></div>
+          <label>Observaciones <textarea name="observaciones"></textarea></label>
+          <button>Generar lote de stock</button>
+        </form>
+
+        <div class="panel">
+          <h2>Preparaciones disponibles sin orden</h2>
+          <div id="tabla-stock"></div>
+        </div>
+      </section>
+
+      <section id="ordenes" class="view">
+        <div class="tabs" data-tabs="ordenes">
+          <button class="tab active" data-panel="orden-listado">Ordenes</button>
+          <button class="tab" data-panel="orden-amasado">Registrar fase</button>
+          <button class="tab" data-panel="orden-lotes">Lotes y registros</button>
+        </div>
+
+        <div id="orden-listado" class="tab-panel active">
+          <form id="orden-form" class="panel">
+            <h2>Nueva orden</h2>
+            <div class="form-grid">
+              <label>Producto <select name="id_producto" id="orden-producto" required></select></label>
+              <label>Cantidad objetivo <input name="cantidad_objetivo" type="number" step="0.001" required></label>
+              <label>Unidad <input name="unidad_medida" value="kg" required></label>
+              <label>Fecha <input name="fecha_programada" type="date" required></label>
+              <label>Responsable <input name="responsable"></label>
+            </div>
+            <label>Observaciones <textarea name="observaciones"></textarea></label>
+            <button>Crear orden</button>
+          </form>
+          <div class="panel">
+            <h2>Ordenes de produccion</h2>
+            <div id="tabla-ordenes"></div>
+          </div>
+        </div>
+
+        <div id="orden-amasado" class="tab-panel">
+          <form id="transformacion-form" class="panel wide">
+            <div class="form-heading">
+              <h2>Registro de fase</h2>
+              <span id="output-preview" class="badge">ST</span>
+            </div>
+            <div class="form-grid process-grid">
+              <label>Orden <select name="id_orden" id="tr-orden" required></select></label>
+              <label>Fase <select name="id_fase" id="tr-fase" required></select></label>
+              <label id="field-temperatura"><span id="label-temperatura">Temperatura (C)</span><input name="temperatura_masa" type="number" step="0.01"></label>
+              <label id="field-peso-total">Peso total (kg) <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
+              <label id="field-peso-porcion">Peso por porcion (kg) <input name="peso_por_porcion" type="number" step="0.001" min="0.001"></label>
+            </div>
+            <div id="timer-panel" class="timer-panel">
+              <span>Tiempo de amasado</span>
+              <strong id="mixing-time">00:00:00</strong>
+              <div class="timer-actions">
+                <button type="button" id="start-mixing">Iniciar amasado</button>
+                <button type="button" id="stop-mixing" class="danger" disabled>Fin de amasado</button>
+              </div>
+              <input type="hidden" name="hora_inicio" id="mixing-start">
+              <input type="hidden" name="hora_fin" id="mixing-end">
+              <input type="hidden" name="duracion_amasado_seg" id="mixing-seconds">
+            </div>
+            <div class="origins-head">
+              <div>
+                <h3>Lotes que se unen</h3>
+                <small id="origin-total" class="muted">Total seleccionado: 0 kg</small>
+              </div>
+              <button type="button" id="add-origin" class="secondary">Agregar lote</button>
+            </div>
+            <div id="origenes"></div>
+            <button id="save-mixing">Generar lote automaticamente</button>
+          </form>
+        </div>
+
+        <div id="orden-lotes" class="tab-panel">
+          <div class="panel">
+            <h2>Lotes de produccion</h2>
+            <div id="tabla-lotes"></div>
+          </div>
+          <div class="panel">
+            <h2>Registros de fases</h2>
+            <div id="tabla-registros"></div>
+          </div>
+          <div class="panel">
+            <h2>Detalle del lote</h2>
+            <div id="detalle-lote" class="muted">Seleccione un lote.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="trazabilidad" class="view">
+        <form id="trace-form" class="panel inline">
+          <label>Codigo de lote <input id="trace-code" placeholder="PT-CROI-YYYYMMDD-001" required></label>
+          <button>Buscar</button>
+        </form>
+        <div class="panel trace-panel">
+          <h2>Arbol genealogico</h2>
+          <div id="trace-result"></div>
+        </div>
+      </section>
+
+      <section id="calidad" class="view">
+        <form id="calidad-form" class="panel">
+          <h2>Control de calidad</h2>
+          <div class="form-grid">
+            <label>Lote <select name="id_lote_prod" id="cc-lote" required></select></label>
+            <label>Registro fase <input name="id_registro_fase" type="number" required></label>
+            <label>Fecha <input name="fecha" type="date" required></label>
+            <label>Parametro <input name="parametro" required></label>
+            <label>Valor <input name="valor" required></label>
+            <label>Resultado
+              <select name="resultado">
+                <option>APROBADO</option>
+                <option>RECHAZADO</option>
+                <option>OBSERVADO</option>
+              </select>
+            </label>
+          </div>
+          <label>Observaciones <textarea name="observaciones"></textarea></label>
+          <button>Guardar control</button>
+        </form>
+        <div class="panel">
+          <h2>Registros calidad</h2>
+          <div id="tabla-calidad"></div>
+        </div>
+      </section>
+    </main>
+
+    <template id="origin-template">
+      <div class="origin-row">
+        <select class="origin-type">
+          <option value="MP">MP</option>
+          <option value="PROD">PROD</option>
+        </select>
+        <select class="origin-lot"></select>
+        <input class="origin-qty" type="number" step="0.001" min="0" placeholder="Cantidad">
+        <input class="origin-unit" value="kg" placeholder="Unidad">
+        <button type="button" class="danger remove-origin">Quitar</button>
+      </div>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
