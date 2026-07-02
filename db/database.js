@@ -23,6 +23,95 @@ function ensureRegistroFaseColumns() {
   });
 }
 
+function tableColumns(table) {
+  const result = sqlDb.exec(`PRAGMA table_info(${table})`);
+  return new Set((result[0]?.values || []).map((row) => row[1]));
+}
+
+function ensureColumn(table, column, definition) {
+  const columns = tableColumns(table);
+  if (!columns.has(column)) sqlDb.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function slug(value, fallback) {
+  return String(value || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || fallback;
+}
+
+function ensureCatalogItem({ codigo, descripcion, tipo_item, unidad_medida, familia }) {
+  const existing = rawGet('SELECT id_item FROM CATALOGO_ITEM WHERE codigo = ?', [codigo]);
+  if (existing) return existing.id_item;
+  sqlDb.run(`
+    INSERT INTO CATALOGO_ITEM (codigo, descripcion, tipo_item, unidad_medida, familia, activo)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `, [codigo, descripcion, tipo_item, unidad_medida, familia || null]);
+  return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function ensureCatalogColumns() {
+  ensureColumn('MATERIA_PRIMA', 'id_item', 'INTEGER');
+  ensureColumn('PRODUCTO', 'id_item', 'INTEGER');
+  ensureColumn('TIPO_PREPARACION', 'id_item', 'INTEGER');
+  ensureColumn('DETALLE_RECETA', 'id_item', 'INTEGER');
+
+  const materias = sqlDb.exec('SELECT id_materia_prima, nombre, descripcion, unidad_medida FROM MATERIA_PRIMA WHERE id_item IS NULL')[0]?.values || [];
+  materias.forEach(([id, nombre, descripcion, unidad]) => {
+    const idItem = ensureCatalogItem({
+      codigo: `MP-${slug(nombre, id)}`,
+      descripcion: descripcion || nombre,
+      tipo_item: 'MP',
+      unidad_medida: unidad || 'kg',
+      familia: 'Materia prima'
+    });
+    sqlDb.run('UPDATE MATERIA_PRIMA SET id_item = ? WHERE id_materia_prima = ?', [idItem, id]);
+  });
+
+  const productos = sqlDb.exec('SELECT id_producto, nombre, descripcion, categoria FROM PRODUCTO WHERE id_item IS NULL')[0]?.values || [];
+  productos.forEach(([id, nombre, descripcion, categoria]) => {
+    const idItem = ensureCatalogItem({
+      codigo: `PT-${slug(nombre, id)}`,
+      descripcion: descripcion || nombre,
+      tipo_item: 'PRODUCTO_TERMINADO',
+      unidad_medida: 'kg',
+      familia: categoria || 'Producto terminado'
+    });
+    sqlDb.run('UPDATE PRODUCTO SET id_item = ? WHERE id_producto = ?', [idItem, id]);
+  });
+
+  const tipos = sqlDb.exec('SELECT id_tipo_preparacion, nombre, categoria, descripcion FROM TIPO_PREPARACION WHERE id_item IS NULL')[0]?.values || [];
+  tipos.forEach(([id, nombre, categoria, descripcion]) => {
+    const idItem = ensureCatalogItem({
+      codigo: `ST-${slug(categoria || nombre, id)}`,
+      descripcion: descripcion || nombre,
+      tipo_item: 'SEMIELABORADO',
+      unidad_medida: 'kg',
+      familia: categoria || 'Semielaborado'
+    });
+    sqlDb.run('UPDATE TIPO_PREPARACION SET id_item = ? WHERE id_tipo_preparacion = ?', [idItem, id]);
+  });
+
+  sqlDb.run(`
+    UPDATE DETALLE_RECETA
+    SET id_item = (
+      SELECT id_item FROM MATERIA_PRIMA mp WHERE mp.id_materia_prima = DETALLE_RECETA.id_materia_prima
+    )
+    WHERE id_item IS NULL AND id_materia_prima IS NOT NULL
+  `);
+  sqlDb.run(`
+    UPDATE DETALLE_RECETA
+    SET id_item = (
+      SELECT id_item FROM TIPO_PREPARACION tp WHERE tp.id_tipo_preparacion = DETALLE_RECETA.id_tipo_preparacion
+    )
+    WHERE id_item IS NULL AND id_tipo_preparacion IS NOT NULL
+  `);
+  sqlDb.run('CREATE INDEX IF NOT EXISTS idx_detalle_receta_item ON DETALLE_RECETA(id_item)');
+}
+
 function rawGet(sql, params = []) {
   const stmt = sqlDb.prepare(sql);
   stmt.bind(params);
@@ -58,6 +147,7 @@ function ensureSystemData() {
     SELECT ?, NULL, 'STOCK-GENERAL', date('now'), 0, 'kg', 'ABIERTA', 'Sistema', 'Orden tecnica para stock no asociado a produccion'
     WHERE NOT EXISTS (SELECT 1 FROM ORDEN_PRODUCCION WHERE codigo_orden = 'STOCK-GENERAL')
   `, [product.id_producto]);
+  ensureCatalogColumns();
   persist();
 }
 
@@ -131,7 +221,9 @@ const api = {
     sqlDb.run('PRAGMA foreign_keys = ON');
     sqlDb.run(fs.readFileSync(schemaPath, 'utf8'));
     ensureRegistroFaseColumns();
+    ensureCatalogColumns();
     ensureSystemData();
+    ensureCatalogColumns();
     persist();
     return api;
   }),

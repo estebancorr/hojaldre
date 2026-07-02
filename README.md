@@ -2,7 +2,9 @@
 
 Aplicacion web local para simular lotes, transformaciones y trazabilidad hacia atras del proceso de produccion de hojaldre.
 
-La navegacion principal se divide en `Inicio`, `MP`, `Preparaciones`, `Ordenes`, `Trazabilidad` y `Control de calidad`. En `Ordenes > Registrar fase`, el sistema genera automaticamente el lote ST o PT segun la fase seleccionada. Los campos cambian por fase y el cronometro aparece unicamente durante `Preparacion de masa`.
+La navegacion principal se divide en `Inicio`, `Catalogo`, `MP`, `Preparaciones`, `Ordenes`, `Trazabilidad` y `Control de calidad`. En `Ordenes > Registrar fase`, el sistema genera automaticamente el lote ST o PT segun la fase seleccionada. Los campos cambian por fase y el cronometro aparece unicamente durante `Preparacion de masa`.
+
+El modelo usa `CATALOGO_ITEM` como maestro comun para materias primas, semielaborados, productos terminados, empaques, rellenos y otros items. Desde ese catalogo se enlazan `MATERIA_PRIMA`, `PRODUCTO` y `TIPO_PREPARACION`, que luego alimentan recetas, explosion de materiales, ordenes, fases, lotes, consumos y trazabilidad.
 
 El modulo `Preparaciones` permite consolidar lotes o generar preparaciones para stock general sin seleccionar una orden. Esos lotes conservan su trazabilidad y quedan disponibles como origen para cualquier orden posterior.
 
@@ -60,6 +62,8 @@ http://localhost:3000
 
 ## API principal
 
+- `GET /api/catalogo-items`
+- `POST /api/catalogo-items`
 - `GET /api/proveedores`
 - `POST /api/proveedores`
 - `GET /api/materias-primas`

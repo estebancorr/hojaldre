@@ -1,5 +1,6 @@
 const state = {
   view: 'dashboard',
+  catalogoItems: [],
   proveedores: [],
   materias: [],
   lotesMp: [],
@@ -16,6 +17,7 @@ const state = {
 };
 
 const endpoints = {
+  catalogoItems: '/api/catalogo-items',
   proveedores: '/api/proveedores',
   materias: '/api/materias-primas',
   lotesMp: '/api/lotes-materia-prima',
@@ -109,6 +111,7 @@ async function loadAll() {
 function render() {
   renderSelects();
   renderDashboard();
+  renderCatalogo();
   renderProveedores();
   renderMaterias();
   renderStock();
@@ -118,11 +121,22 @@ function render() {
   renderCalidad();
 }
 
+function renderCatalogo() {
+  $('#tabla-catalogo').innerHTML = table(state.catalogoItems, [
+    { label: 'Codigo', key: 'codigo' },
+    { label: 'Descripcion', key: 'descripcion' },
+    { label: 'Tipo', key: 'tipo_item' },
+    { label: 'Unidad', key: 'unidad_medida' },
+    { label: 'Familia', key: 'familia' },
+    { label: 'Activo', render: (r) => Number(r.activo) ? 'Si' : 'No' }
+  ]);
+}
+
 function renderSelects() {
-  fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.nombre} (${r.unidad_medida})`);
+  fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.codigo_item || 'MP'} - ${r.nombre} (${r.unidad_medida})`);
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
-  fillSelect('#stock-tipo', state.tipos.filter((r) => r.nombre !== 'Producto terminado'), 'id_tipo_preparacion', (r) => `${r.nombre} (${r.categoria || 'ST'})`, false);
-  fillSelect('#orden-producto', state.productos, 'id_producto', (r) => r.nombre);
+  fillSelect('#stock-tipo', state.tipos.filter((r) => r.nombre !== 'Producto terminado'), 'id_tipo_preparacion', (r) => `${r.codigo_item || r.categoria || 'ST'} - ${r.nombre}`, false);
+  fillSelect('#orden-producto', state.productos, 'id_producto', (r) => `${r.codigo_item || 'PT'} - ${r.nombre}`);
   fillSelect('#tr-orden', state.ordenes, 'id_orden', (r) => r.codigo_orden, false);
   fillSelect('#tr-fase', state.fases.filter((r) => !['Recepcion materia prima', 'Generacion de lote para stock'].includes(r.nombre_fase)), 'id_fase', (r) => r.nombre_fase, false);
   updateOutputPreview();
@@ -155,6 +169,7 @@ function renderProveedores() {
 function renderDashboard() {
   $('#dashboard').innerHTML = `
     <div class="cards">
+      <div class="card">Catalogo<strong>${state.catalogoItems.length}</strong></div>
       <div class="card">Materias primas<strong>${state.lotesMp.length}</strong></div>
       <div class="card">Ordenes<strong>${state.ordenes.length}</strong></div>
       <div class="card">Lotes produccion<strong>${state.lotesProd.length}</strong></div>
@@ -174,6 +189,7 @@ function renderDashboard() {
 
 function renderMaterias() {
   $('#tabla-materias').innerHTML = table(state.materias, [
+    { label: 'Codigo item', key: 'codigo_item' },
     { label: 'Materia prima', key: 'nombre' },
     { label: 'Descripcion', key: 'descripcion' },
     { label: 'Unidad', key: 'unidad_medida' },
@@ -499,6 +515,7 @@ function setView(name) {
 
 function bindForms() {
   const simpleForms = [
+    ['#catalogo-item-form', '/api/catalogo-items'],
     ['#materia-form', '/api/materias-primas'],
     ['#proveedor-form', '/api/proveedores'],
     ['#lote-mp-form', '/api/lotes-materia-prima'],

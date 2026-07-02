@@ -14,6 +14,7 @@
       </div>
       <nav>
         <button class="nav active" data-view="dashboard">Inicio</button>
+        <button class="nav" data-view="catalogo">Catalogo</button>
         <button class="nav" data-view="materias">MP</button>
         <button class="nav" data-view="preparaciones">Preparaciones</button>
         <button class="nav" data-view="ordenes">Ordenes</button>
@@ -32,6 +33,34 @@
       </header>
 
       <section id="dashboard" class="view active"></section>
+
+      <section id="catalogo" class="view">
+        <form id="catalogo-item-form" class="panel">
+          <h2>Catalogo de items</h2>
+          <div class="form-grid">
+            <label>Codigo <input name="codigo" required></label>
+            <label>Descripcion <input name="descripcion" required></label>
+            <label>Tipo item
+              <select name="tipo_item" required>
+                <option value="MP">MP</option>
+                <option value="SEMIELABORADO">Semielaborado</option>
+                <option value="PRODUCTO_TERMINADO">Producto terminado</option>
+                <option value="EMPAQUE">Empaque</option>
+                <option value="RELLENO">Relleno</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </label>
+            <label>Unidad <input name="unidad_medida" placeholder="kg" required></label>
+            <label>Familia <input name="familia"></label>
+          </div>
+          <button>Guardar item</button>
+        </form>
+
+        <div class="panel">
+          <h2>Items registrados</h2>
+          <div id="tabla-catalogo"></div>
+        </div>
+      </section>
 
       <section id="materias" class="view">
         <div class="tabs" data-tabs="mp">

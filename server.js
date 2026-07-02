@@ -9,6 +9,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/proveedores', require('./routes/proveedores'));
+app.use('/api/catalogo-items', require('./routes/catalogoItems'));
 app.use('/api/materias-primas', require('./routes/materiasPrimas'));
 app.use('/api/lotes-materia-prima', require('./routes/lotesMateriaPrima'));
 app.use('/api/productos', require('./routes/productos'));

@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const dbFile = path.join(__dirname, 'trazabilidad.sqlite');
+const dbFile = process.env.TRACE_DB_PATH
+  ? path.resolve(process.env.TRACE_DB_PATH)
+  : path.join(__dirname, 'trazabilidad.sqlite');
 if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
 
 const db = require('./database');
@@ -19,6 +21,15 @@ function lote(prefix, seq = '001') {
   return `${prefix}-${today.replace(/-/g, '')}-${seq}`;
 }
 
+function codigo(value) {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 const seed = db.transaction(() => {
   db.exec(`
     DELETE FROM CONTROL_CALIDAD;
@@ -26,6 +37,7 @@ const seed = db.transaction(() => {
     DELETE FROM REGISTRO_FASE;
     DELETE FROM LOTE_PRODUCCION;
     DELETE FROM ORDEN_PRODUCCION;
+    DELETE FROM EXPLOSION_MATERIALES;
     DELETE FROM DETALLE_RECETA;
     DELETE FROM RECETA;
     DELETE FROM LOTE_MATERIA_PRIMA;
@@ -35,6 +47,7 @@ const seed = db.transaction(() => {
     DELETE FROM TIPO_PREPARACION;
     DELETE FROM PRODUCTO;
     DELETE FROM MATERIA_PRIMA;
+    DELETE FROM CATALOGO_ITEM;
     DELETE FROM PROVEEDOR;
   `);
 
@@ -55,7 +68,15 @@ const seed = db.transaction(() => {
     ['Sal', 'kg', 'MP-SAL-001', 10],
     ['Azucar', 'kg', 'MP-AZU-001', 15]
   ].forEach(([nombre, unidad, loteInterno, peso]) => {
-    const id = insert('MATERIA_PRIMA', { nombre, descripcion: nombre, unidad_medida: unidad, temperatura_objetivo: null, estado: 'ACTIVA' });
+    const idItem = insert('CATALOGO_ITEM', {
+      codigo: `MP-${codigo(nombre)}`,
+      descripcion: nombre,
+      tipo_item: 'MP',
+      unidad_medida: unidad,
+      familia: 'Materia prima',
+      activo: 1
+    });
+    const id = insert('MATERIA_PRIMA', { id_item: idItem, nombre, descripcion: nombre, unidad_medida: unidad, temperatura_objetivo: null, estado: 'ACTIVA' });
     const loteId = insert('LOTE_MATERIA_PRIMA', {
       id_materia_prima: id,
       id_proveedor: proveedor,
@@ -72,7 +93,17 @@ const seed = db.transaction(() => {
     mp[nombre] = { id, loteId };
   });
 
+  const itemProducto = insert('CATALOGO_ITEM', {
+    codigo: 'PT-CROISSANT-CONGELADO-SIMPLE',
+    descripcion: 'Croissant congelado simple',
+    tipo_item: 'PRODUCTO_TERMINADO',
+    unidad_medida: 'kg',
+    familia: 'Hojaldre',
+    activo: 1
+  });
+
   const producto = insert('PRODUCTO', {
+    id_item: itemProducto,
     nombre: 'Croissant congelado simple',
     descripcion: 'Croissant de hojaldre congelado',
     categoria: 'Hojaldre',
@@ -91,8 +122,17 @@ const seed = db.transaction(() => {
     ['Croissant congelado', 'CONG-CROI'],
     ['Producto terminado', 'PT-CROI']
   ].forEach(([nombre, prefijo]) => {
+    const tipoItem = nombre === 'Producto terminado' ? 'PRODUCTO_TERMINADO' : 'SEMIELABORADO';
+    const idItem = insert('CATALOGO_ITEM', {
+      codigo: prefijo,
+      descripcion: nombre,
+      tipo_item: tipoItem,
+      unidad_medida: 'kg',
+      familia: tipoItem === 'PRODUCTO_TERMINADO' ? 'Producto terminado' : 'Semielaborado',
+      activo: 1
+    });
     tipos[nombre] = {
-      id: insert('TIPO_PREPARACION', { nombre, categoria: prefijo, descripcion: nombre, requiere_receta: 0, estado: 'ACTIVO' }),
+      id: insert('TIPO_PREPARACION', { id_item: idItem, nombre, categoria: prefijo, descripcion: nombre, requiere_receta: 0, estado: 'ACTIVO' }),
       prefijo
     };
   });
