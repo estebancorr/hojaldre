@@ -7,6 +7,7 @@ const state = {
   productos: [],
   tipos: [],
   recetas: [],
+  explosion: [],
   ordenes: [],
   fases: [],
   lotesProd: [],
@@ -24,6 +25,7 @@ const endpoints = {
   productos: '/api/productos',
   tipos: '/api/tipos-preparacion',
   recetas: '/api/recetas',
+  explosion: '/api/explosion-materiales',
   ordenes: '/api/ordenes',
   fases: '/api/fases',
   lotesProd: '/api/lotes-produccion',
@@ -112,6 +114,7 @@ function render() {
   renderSelects();
   renderDashboard();
   renderCatalogo();
+  renderExplosionIndex();
   renderProveedores();
   renderMaterias();
   renderStock();
@@ -130,6 +133,35 @@ function renderCatalogo() {
     { label: 'Familia', key: 'familia' },
     { label: 'Activo', render: (r) => Number(r.activo) ? 'Si' : 'No' }
   ]);
+}
+
+function renderExplosionIndex() {
+  if (!$('#explosion-result') || state.view === 'explosion') return;
+}
+
+function renderExplosionResult(data) {
+  $('#explosion-result').classList.remove('muted');
+  $('#explosion-result').innerHTML = `
+    <p><strong>${data.codigo}</strong> - ${data.descripcion}</p>
+    ${table(data.componentes || [], [
+      { label: 'Codigo', key: 'codigo' },
+      { label: 'Descripcion', key: 'descripcion' },
+      { label: 'Tipo', key: 'tipo_item' },
+      { label: 'Cantidad', render: (r) => `${r.cantidad} ${r.unidad}` },
+      { label: 'Nivel', key: 'nivel' }
+    ])}
+    <button type="button" id="explosion-to-order" class="secondary">Generar orden</button>
+  `;
+  $('#explosion-to-order').addEventListener('click', () => {
+    const product = state.productos.find((row) => row.codigo_item === data.codigo);
+    if (!product) {
+      setStatus('Ese codigo no esta registrado como producto terminado para crear orden.', true);
+      return;
+    }
+    setView('ordenes');
+    $('#orden-producto').value = product.id_producto;
+    setStatus(`Producto ${data.codigo} seleccionado para nueva orden`);
+  });
 }
 
 function renderSelects() {
@@ -580,6 +612,20 @@ function bindForms() {
       setStatus('Trazabilidad cargada');
     } catch (error) {
       $('#trace-result').innerHTML = '';
+      setStatus(error.message, true);
+    }
+  });
+
+  $('#explosion-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const code = $('#explosion-code').value.trim();
+      const data = await api(`/api/explosion-materiales/producto/${encodeURIComponent(code)}`);
+      renderExplosionResult(data);
+      setStatus('Explosion de materiales cargada');
+    } catch (error) {
+      $('#explosion-result').classList.add('muted');
+      $('#explosion-result').textContent = '';
       setStatus(error.message, true);
     }
   });

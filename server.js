@@ -15,6 +15,7 @@ app.use('/api/lotes-materia-prima', require('./routes/lotesMateriaPrima'));
 app.use('/api/productos', require('./routes/productos'));
 app.use('/api/tipos-preparacion', require('./routes/tiposPreparacion'));
 app.use('/api/recetas', require('./routes/recetas'));
+app.use('/api/explosion-materiales', require('./routes/explosionMateriales'));
 app.use('/api/ordenes', require('./routes/ordenes'));
 app.use('/api/fases', require('./routes/fases'));
 app.use('/api/lotes-produccion', require('./routes/lotesProduccion'));

@@ -16,6 +16,7 @@
         <button class="nav active" data-view="dashboard">Inicio</button>
         <button class="nav" data-view="catalogo">Catalogo</button>
         <button class="nav" data-view="materias">MP</button>
+        <button class="nav" data-view="explosion">Explosion materiales</button>
         <button class="nav" data-view="preparaciones">Preparaciones</button>
         <button class="nav" data-view="ordenes">Ordenes</button>
         <button class="nav" data-view="trazabilidad">Trazabilidad</button>
@@ -118,6 +119,17 @@
             <h2>Lotes materia prima</h2>
             <div id="tabla-mp"></div>
           </div>
+        </div>
+      </section>
+
+      <section id="explosion" class="view">
+        <form id="explosion-form" class="panel inline">
+          <label>Codigo producto <input id="explosion-code" placeholder="PTSU0046" required></label>
+          <button>Buscar</button>
+        </form>
+        <div class="panel">
+          <h2>Explosion de materiales</h2>
+          <div id="explosion-result" class="muted">Busque un codigo de producto o semielaborado.</div>
         </div>
       </section>
 

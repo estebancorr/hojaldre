@@ -6,6 +6,8 @@ La navegacion principal se divide en `Inicio`, `Catalogo`, `MP`, `Preparaciones`
 
 El modelo usa `CATALOGO_ITEM` como maestro comun para materias primas, semielaborados, productos terminados, empaques, rellenos y otros items. Desde ese catalogo se enlazan `MATERIA_PRIMA`, `PRODUCTO` y `TIPO_PREPARACION`, que luego alimentan recetas, explosion de materiales, ordenes, fases, lotes, consumos y trazabilidad.
 
+El seed incluye productos y relaciones visibles en los PDFs de referencia. Cuando el PDF no muestra cantidades exactas, `DETALLE_RECETA` y `EXPLOSION_MATERIALES` se cargan con cantidad `1` como marcador; esas cantidades deben reemplazarse por los valores reales cuando la empresa los proporcione.
+
 El modulo `Preparaciones` permite consolidar lotes o generar preparaciones para stock general sin seleccionar una orden. Esos lotes conservan su trazabilidad y quedan disponibles como origen para cualquier orden posterior.
 
 ## Requisitos
@@ -76,6 +78,8 @@ http://localhost:3000
 - `POST /api/tipos-preparacion`
 - `GET /api/recetas`
 - `POST /api/recetas`
+- `GET /api/explosion-materiales`
+- `GET /api/explosion-materiales/producto/:codigo`
 - `GET /api/ordenes`
 - `POST /api/ordenes`
 - `GET /api/fases`

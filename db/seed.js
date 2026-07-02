@@ -17,6 +17,10 @@ function insert(table, data) {
   return stmt.run(data).lastInsertRowid;
 }
 
+function get(table, column, value) {
+  return db.prepare(`SELECT * FROM ${table} WHERE ${column} = ?`).get(value);
+}
+
 function lote(prefix, seq = '001') {
   return `${prefix}-${today.replace(/-/g, '')}-${seq}`;
 }
@@ -28,6 +32,143 @@ function codigo(value) {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function tipoItemPorCodigo(code) {
+  if (code.startsWith('PT')) return 'PRODUCTO_TERMINADO';
+  if (code.startsWith('MDME')) return 'EMPAQUE';
+  if (code.startsWith('MDMP') || code.startsWith('MEDMP')) return 'MP';
+  if (code.startsWith('STMZ')) return 'RELLENO';
+  if (code.startsWith('GSGE')) return 'OTRO';
+  if (code.startsWith('ST')) return 'SEMIELABORADO';
+  return 'OTRO';
+}
+
+function unidadPorDescripcion(desc, fallback = 'UND') {
+  if (/\bKG\b/i.test(desc)) return 'kg';
+  if (/\bGR\b/i.test(desc)) return 'gr';
+  if (/\bCAJ\b/i.test(desc)) return 'CAJ';
+  if (/\bPAQ\b/i.test(desc)) return 'PAQ';
+  return fallback;
+}
+
+function ensureCatalogItem(code, desc, options = {}) {
+  const existing = get('CATALOGO_ITEM', 'codigo', code);
+  if (existing) return existing.id_item;
+  return insert('CATALOGO_ITEM', {
+    codigo: code,
+    descripcion: desc,
+    tipo_item: options.tipo_item || tipoItemPorCodigo(code),
+    unidad_medida: options.unidad_medida || unidadPorDescripcion(desc, 'UND'),
+    familia: options.familia || 'HOJALDRE',
+    activo: 1
+  });
+}
+
+function ensureProductFromCatalog(code, desc, unidad = 'UND', familia = 'HOJALDRE') {
+  const idItem = ensureCatalogItem(code, desc, { tipo_item: 'PRODUCTO_TERMINADO', unidad_medida: unidad, familia });
+  const existing = db.prepare('SELECT id_producto FROM PRODUCTO WHERE id_item = ?').get(idItem);
+  if (existing) return existing.id_producto;
+  return insert('PRODUCTO', {
+    id_item: idItem,
+    nombre: desc,
+    descripcion: desc,
+    categoria: familia,
+    peso_objetivo_unidad: null,
+    estado: 'ACTIVO'
+  });
+}
+
+function ensureTipoPreparacionFromCatalog(code, desc) {
+  const tipo = tipoItemPorCodigo(code);
+  const idItem = ensureCatalogItem(code, desc, { tipo_item: tipo, unidad_medida: unidadPorDescripcion(desc, 'kg'), familia: tipo === 'RELLENO' ? 'RELLENO' : 'HOJALDRE' });
+  const existing = db.prepare('SELECT id_tipo_preparacion FROM TIPO_PREPARACION WHERE id_item = ?').get(idItem);
+  if (existing) return existing.id_tipo_preparacion;
+  return insert('TIPO_PREPARACION', {
+    id_item: idItem,
+    nombre: desc,
+    categoria: code,
+    descripcion: desc,
+    requiere_receta: 0,
+    estado: 'ACTIVO'
+  });
+}
+
+function ensureMateriaPrimaFromCatalog(code, desc) {
+  const idItem = ensureCatalogItem(code, desc, { tipo_item: tipoItemPorCodigo(code), unidad_medida: unidadPorDescripcion(desc, 'kg'), familia: 'INSUMO' });
+  const existing = db.prepare('SELECT id_materia_prima FROM MATERIA_PRIMA WHERE id_item = ?').get(idItem);
+  if (existing) return existing.id_materia_prima;
+  return insert('MATERIA_PRIMA', {
+    id_item: idItem,
+    nombre: desc,
+    descripcion: desc,
+    unidad_medida: unidadPorDescripcion(desc, 'kg'),
+    temperatura_objetivo: null,
+    estado: 'ACTIVA'
+  });
+}
+
+function ensureRecipeForCode(code, desc) {
+  const item = get('CATALOGO_ITEM', 'codigo', code);
+  if (item?.tipo_item === 'PRODUCTO_TERMINADO') {
+    const productId = ensureProductFromCatalog(code, desc, unidadPorDescripcion(desc, 'UND'), 'HOJALDRE');
+    const existing = db.prepare('SELECT id_receta FROM RECETA WHERE id_producto = ? AND nombre_receta = ?').get(productId, `${code} v1`);
+    if (existing) return existing.id_receta;
+    return insert('RECETA', {
+      id_producto: productId,
+      id_tipo_preparacion: null,
+      nombre_receta: `${code} v1`,
+      version: '1',
+      rendimiento_estimado: null,
+      activa: 1
+    });
+  }
+
+  const tipoId = ensureTipoPreparacionFromCatalog(code, desc);
+  const existing = db.prepare('SELECT id_receta FROM RECETA WHERE id_tipo_preparacion = ? AND nombre_receta = ?').get(tipoId, `${code} v1`);
+  if (existing) return existing.id_receta;
+  return insert('RECETA', {
+    id_producto: null,
+    id_tipo_preparacion: tipoId,
+    nombre_receta: `${code} v1`,
+    version: '1',
+    rendimiento_estimado: null,
+    activa: 1
+  });
+}
+
+function linkRecipe(parentCode, parentDesc, childCode, childDesc) {
+  ensureCatalogItem(parentCode, parentDesc, { tipo_item: tipoItemPorCodigo(parentCode), unidad_medida: unidadPorDescripcion(parentDesc, 'UND'), familia: 'HOJALDRE' });
+  const childType = tipoItemPorCodigo(childCode);
+  const childItemId = ensureCatalogItem(childCode, childDesc, {
+    tipo_item: childType,
+    unidad_medida: unidadPorDescripcion(childDesc, childType === 'EMPAQUE' ? 'UND' : 'kg'),
+    familia: childType === 'RELLENO' ? 'RELLENO' : childType === 'EMPAQUE' ? 'EMPAQUE' : 'HOJALDRE'
+  });
+  if (childType === 'MP' || childType === 'EMPAQUE' || childType === 'OTRO') ensureMateriaPrimaFromCatalog(childCode, childDesc);
+  if (['SEMIELABORADO', 'RELLENO'].includes(childType)) ensureTipoPreparacionFromCatalog(childCode, childDesc);
+  const recetaId = ensureRecipeForCode(parentCode, parentDesc);
+  const exists = db.prepare('SELECT id_detalle_receta FROM DETALLE_RECETA WHERE id_receta = ? AND id_item = ?').get(recetaId, childItemId);
+  if (exists) return;
+  const detalleId = insert('DETALLE_RECETA', {
+    id_receta: recetaId,
+    id_item: childItemId,
+    tipo_insumo: ['SEMIELABORADO', 'RELLENO', 'PRODUCTO_TERMINADO'].includes(childType) ? 'PREPARACION' : 'MP',
+    id_materia_prima: null,
+    id_tipo_preparacion: null,
+    cantidad_estandar: 1,
+    unidad_medida: unidadPorDescripcion(childDesc, 'UND'),
+    tolerancia: 0
+  });
+  insert('EXPLOSION_MATERIALES', {
+    id_receta: recetaId,
+    id_item: childItemId,
+    id_detalle_receta: detalleId,
+    cantidad_requerida: 1,
+    unidad_medida: unidadPorDescripcion(childDesc, 'UND'),
+    nivel: 1,
+    activo: 1
+  });
 }
 
 const seed = db.transaction(() => {
@@ -241,6 +382,159 @@ const seed = db.transaction(() => {
   const form = crearLote({ prefijo: 'FORM-CROI', tipoNombre: 'Croissant formado', fase: 'Formado', cantidad: 20, origenes: [{ tipo: 'PROD', id: rep, cantidad: 20 }], obs: 'Formado demo' });
   const cong = crearLote({ prefijo: 'CONG-CROI', tipoNombre: 'Croissant congelado', fase: 'Congelado', cantidad: 20, origenes: [{ tipo: 'PROD', id: form, cantidad: 20 }], obs: 'Congelado demo' });
   crearLote({ prefijo: 'PT-CROI', tipoNombre: 'Producto terminado', fase: 'Empaque', cantidad: 20, origenes: [{ tipo: 'PROD', id: cong, cantidad: 20 }], obs: 'Producto terminado demo' });
+
+  const pdfProducts = [
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'CAJ', 'HOJALDRE'],
+    ['PTEM0135', 'TEQUENOS 30 UND', 'PAQ', 'HOJALDRE'],
+    ['PTEM0136', 'TEQUENOS 15 UND', 'PAQ', 'HOJALDRE'],
+    ['PTSU0028', 'MINI CROISSANT SIMPLE 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0046', 'CROISSANT SIMPLE 120 GR 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0047', 'CROISSANT CHOCO-LECHE 160 GR 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0048', 'CROISSANT CHOCO-OSCURO 160 GR 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0049', 'HOJALDRE DE MANZANA 160 GR 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0077', 'MINI CROISSANT CON PISTACHO', 'UND', 'HOJALDRE'],
+    ['PTSU0082', 'CRUFFIN DE PISTACHOS 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0083', 'CRUFFIN DE CAFE Y AVELLANAS 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0091', 'PASTELITO DE HOJALDRE DE POLLO 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0092', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0093', 'PASTELITO DE HOJALDRE RICOTA Y ESPINACA 1 UND', 'UND', 'HOJALDRE'],
+    ['PTSU0095', 'PASTELITO DE HOJALDRE DE JAMON', 'UND', 'HOJALDRE'],
+    ['STPC0013', 'CROISSANT SIMPLE 120 GR CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0016', 'HOJALDRE DE MANZANA 160 GR CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0022', 'MINI CROISSANT CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0024', 'CRUFFIN CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0025', 'PASTELITO DE HOJALDRE DE RICOTA Y ESPINACA CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0026', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0027', 'PASTELITO DE HOJALDRE DE POLLO CONGELADO 1 UND ST', 'UND', 'HOJALDRE'],
+    ['STPC0028', 'PASTELITO DE HOJALDRE DE JAMON CONGELADO 1 UND', 'UND', 'HOJALDRE'],
+    ['STPC0029', 'TEQUENOS 1 UND', 'UND', 'HOJALDRE']
+  ];
+
+  pdfProducts.forEach(([code, desc, unidad, familia]) => {
+    if (code.startsWith('PT')) ensureProductFromCatalog(code, desc, unidad, familia);
+    else ensureTipoPreparacionFromCatalog(code, desc);
+  });
+
+  const pdfExplosions = [
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'STMS0009', 'ROLLO PARA FORMAR PALMERITAS 1 KG'],
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'MDME0016', 'CONTENEDOR CIERRE PLUS 12 OZ 200 UND'],
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'MDME0129', 'ETIQUETA ZEBRA 57X19 MM 2000 UND'],
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'MDME0121', 'FAJA DE CARTON PARA PALMERITAS'],
+    ['PTEM0104', 'CAJA DE PALMERITAS 120 GR 8 UND', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['PTEM0135', 'TEQUENOS 30 UND', 'STPC0029', 'TEQUENOS 1 UND'],
+    ['PTEM0135', 'TEQUENOS 30 UND', 'MDME0053', 'BOLSA AL VACIO TRANSPARENTE 28X70CM 1000 UND'],
+    ['PTEM0135', 'TEQUENOS 30 UND', 'MDME0094', 'BANDEJA DE ANIME TIPO P'],
+    ['PTSU0083', 'CRUFFIN DE CAFE Y AVELLANAS 1 UND', 'STPC0024', 'CRUFFIN CONGELADO 1 UND ST'],
+    ['PTSU0083', 'CRUFFIN DE CAFE Y AVELLANAS 1 UND', 'STMZ0084', 'RELLENO DE CREMA DE AVELLANA Y CAFE'],
+    ['PTSU0082', 'CRUFFIN DE PISTACHOS 1 UND', 'STPC0024', 'CRUFFIN CONGELADO 1 UND ST'],
+    ['PTSU0082', 'CRUFFIN DE PISTACHOS 1 UND', 'STMZ0082', 'RELLENO DE CREMA DE PISTACHO'],
+    ['PTSU0028', 'MINI CROISSANT SIMPLE 1 UND', 'STPC0022', 'MINI CROISSANT CONGELADO 1 UND ST'],
+    ['PTSU0046', 'CROISSANT SIMPLE 120 GR 1 UND', 'STPC0013', 'CROISSANT SIMPLE 120 GR CONGELADO 1 UND ST'],
+    ['PTSU0047', 'CROISSANT CHOCO-LECHE 160 GR 1 UND', 'STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST'],
+    ['PTSU0048', 'CROISSANT CHOCO-OSCURO 160 GR 1 UND', 'STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST'],
+    ['PTSU0049', 'HOJALDRE DE MANZANA 160 GR 1 UND', 'STPC0016', 'HOJALDRE DE MANZANA 160 GR CONGELADO 1 UND ST'],
+    ['PTSU0077', 'MINI CROISSANT CON PISTACHO', 'STPC0022', 'MINI CROISSANT CONGELADO 1 UND ST'],
+    ['PTSU0077', 'MINI CROISSANT CON PISTACHO', 'MDMP0267', 'CREMA DE PISTACHO'],
+    ['PTSU0091', 'PASTELITO DE HOJALDRE DE POLLO 1 UND', 'STPC0027', 'PASTELITO DE HOJALDRE DE POLLO CONGELADO 1 UND ST'],
+    ['PTSU0092', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA 1 UND', 'STPC0026', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA CONGELADO 1 UND ST'],
+    ['PTSU0093', 'PASTELITO DE HOJALDRE RICOTA Y ESPINACA 1 UND', 'STPC0025', 'PASTELITO DE HOJALDRE DE RICOTA Y ESPINACA CONGELADO 1 UND ST'],
+    ['PTSU0095', 'PASTELITO DE HOJALDRE DE JAMON', 'STPC0028', 'PASTELITO DE HOJALDRE DE JAMON CONGELADO 1 UND'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'GSGE0006', 'GASTOS DE AGUA'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0025', 'LEVADURA SECA INSTANTANEA MASA DULCE'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'STMP0016', 'MANTEQUILLA PDT 1 UND'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0153', 'COCO RALLADO'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'STMP0002', 'HUEVO LIQUIDO 1 KG'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0012', 'LECHE EN POLVO'],
+    ['STMS0031', 'MASA PAN DE DIOS 1 KG', 'MDMP0037', 'MEJORADOR PURATOS'],
+    ['STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG', 'MDMP0029', 'MANTEQUILLA TIPO A CON SAL'],
+    ['STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG', 'GSGE0006', 'GASTOS DE AGUA'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'STMP0016', 'MANTEQUILLA PDT 1 UND'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'MDMP0260', 'BOLSA DE HIELO GRANDE'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'GSGE0006', 'GASTOS DE AGUA'],
+    ['STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG', 'MDMP0029', 'MANTEQUILLA TIPO A CON SAL'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0263', 'LECHE LIQUIDA ENTERA'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0029', 'MANTEQUILLA TIPO A CON SAL'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0026', 'LEVADURA SECA INSTANTANEA MASA SALADA'],
+    ['STMS0013', 'MASA PARA CROISSANT TIPO A', 'MDMP0260', 'BOLSA DE HIELO GRANDE'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0263', 'LECHE LIQUIDA ENTERA'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'STMP0016', 'MANTEQUILLA PDT 1 UND'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0026', 'LEVADURA SECA INSTANTANEA MASA SALADA'],
+    ['STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG', 'MDMP0260', 'BOLSA DE HIELO GRANDE'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0263', 'LECHE LIQUIDA ENTERA'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0034', 'MARGARINA CON SAL 5 KG'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0026', 'LEVADURA SECA INSTANTANEA MASA SALADA'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0260', 'BOLSA DE HIELO GRANDE'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'MDMP0150', 'CACAO EN POLVO'],
+    ['STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG', 'GSGE0006', 'GASTOS DE AGUA'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'GSGE0006', 'GASTOS DE AGUA'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'MDMP0260', 'BOLSA DE HIELO GRANDE'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION'],
+    ['STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG', 'STMP0016', 'MANTEQUILLA PDT 1 UND'],
+    ['STMS0009', 'ROLLO PARA FORMAR PALMERITAS 1 KG', 'STMS0014', 'MASA PARA PALMERITA CONGELADA 1 KG'],
+    ['STMS0009', 'ROLLO PARA FORMAR PALMERITAS 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0012', 'MASA COMPUESTA PARA PANETTONE 1 KG', 'MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL'],
+    ['STMS0012', 'MASA COMPUESTA PARA PANETTONE 1 KG', 'STMP0016', 'MANTEQUILLA PDT 1 UND'],
+    ['STMS0012', 'MASA COMPUESTA PARA PANETTONE 1 KG', 'STMP0002', 'HUEVO LIQUIDO 1 KG'],
+    ['STMS0012', 'MASA COMPUESTA PARA PANETTONE 1 KG', 'MDMP0002', 'AZUCAR BLANCA REFINADA'],
+    ['STMS0012', 'MASA COMPUESTA PARA PANETTONE 1 KG', 'STMS0027', 'PREFERMENTO PANETTONE 1 KG'],
+    ['STPC0029', 'TEQUENOS 1 UND', 'STMS0008', 'MASA PARA TEQUENOS DE HOJALDRE 1 KG'],
+    ['STPC0029', 'TEQUENOS 1 UND', 'MDMP0179', 'QUESO BLANCO DURO'],
+    ['STPC0024', 'CRUFFIN CONGELADO 1 UND ST', 'STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG'],
+    ['STPC0024', 'CRUFFIN CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0022', 'MINI CROISSANT CONGELADO 1 UND ST', 'STMS0013', 'MASA PARA CROISSANT TIPO A'],
+    ['STPC0022', 'MINI CROISSANT CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0013', 'CROISSANT SIMPLE 120 GR CONGELADO 1 UND ST', 'STMS0013', 'MASA PARA CROISSANT TIPO A'],
+    ['STPC0013', 'CROISSANT SIMPLE 120 GR CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST', 'STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG'],
+    ['STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST', 'STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG'],
+    ['STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST', 'MDMP0251', 'CHOCOLATE CON LECHE EN MINI BARRAS'],
+    ['STPC0014', 'CROISSANT CHOCO LECHE 160 GR CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST', 'STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG'],
+    ['STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST', 'STMS0024', 'MASA PARA CROISSANT PINTADA TIPO B 1 KG'],
+    ['STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0015', 'CROISSANT CHOCO OSCURO 160 GR CONGELADO 1 UND ST', 'MDMP0252', 'CHOCOLATE OSCURO AL 60 % EN MINI BARRAS'],
+    ['STPC0016', 'HOJALDRE DE MANZANA 160 GR CONGELADO 1 UND ST', 'STMS0023', 'MASA PARA CROISSANT TIPO B 1 KG'],
+    ['STPC0016', 'HOJALDRE DE MANZANA 160 GR CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0016', 'HOJALDRE DE MANZANA 160 GR CONGELADO 1 UND ST', 'STMZ0031', 'RELLENO DULCE DE MANZANA KG'],
+    ['STPC0027', 'PASTELITO DE HOJALDRE DE POLLO CONGELADO 1 UND ST', 'STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG'],
+    ['STPC0027', 'PASTELITO DE HOJALDRE DE POLLO CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0027', 'PASTELITO DE HOJALDRE DE POLLO CONGELADO 1 UND ST', 'STMZ0090', 'RELLENO DE POLLO 1 KG'],
+    ['STPC0026', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA CONGELADO 1 UND ST', 'STMZ0092', 'RELLENO DE CARNE MOLIDA 1 KG'],
+    ['STPC0026', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0026', 'PASTELITO DE HOJALDRE DE CARNE MOLIDA CONGELADO 1 UND ST', 'STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG'],
+    ['STPC0025', 'PASTELITO DE HOJALDRE DE RICOTA Y ESPINACA CONGELADO 1 UND ST', 'STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG'],
+    ['STPC0025', 'PASTELITO DE HOJALDRE DE RICOTA Y ESPINACA CONGELADO 1 UND ST', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0025', 'PASTELITO DE HOJALDRE DE RICOTA Y ESPINACA CONGELADO 1 UND ST', 'STMZ0091', 'RELLENO DE RICOTA Y ESPINACA 1 KG'],
+    ['STPC0028', 'PASTELITO DE HOJALDRE DE JAMON CONGELADO 1 UND', 'STMZ0004', 'MEZCLA DE JAMON PARA CACHITO 1 KG'],
+    ['STPC0028', 'PASTELITO DE HOJALDRE DE JAMON CONGELADO 1 UND', 'STMP0037', 'EMPASTE PARA HOJALDRE 1 UND'],
+    ['STPC0028', 'PASTELITO DE HOJALDRE DE JAMON CONGELADO 1 UND', 'STMS0022', 'MASA PARA PASTELITOS DE HOJALDRE 1 KG']
+  ];
+
+  pdfExplosions.forEach(([parentCode, parentDesc, childCode, childDesc]) => {
+    linkRecipe(parentCode, parentDesc, childCode, childDesc);
+  });
 });
 
 db.ready
