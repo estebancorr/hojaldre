@@ -110,3 +110,20 @@ Para reiniciar los datos de demo, ejecutar nuevamente:
 ```bash
 npm run seed
 ```
+
+## Neon / PostgreSQL
+
+Para preparar la base de Neon:
+
+1. Copiar la cadena de conexion de Neon, preferiblemente la pooled connection string.
+2. Crear un archivo `.env` local basado en `.env.example`.
+3. Ejecutar:
+
+```powershell
+$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/neondb?sslmode=require"
+npm run sync:neon
+```
+
+El script crea el esquema PostgreSQL desde `db/schema.postgres.sql` e importa la base local limpia: catalogo, materias primas, productos, preparaciones, recetas, explosion de materiales y fases.
+
+En Vercel, agregar `DATABASE_URL` en Project Settings > Environment Variables. No se debe subir `.env` al repositorio.

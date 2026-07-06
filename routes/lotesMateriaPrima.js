@@ -4,9 +4,10 @@ const db = require('../db/database');
 const router = express.Router();
 
 const listSql = `
-  SELECT l.*, mp.nombre AS materia_prima, mp.unidad_medida, p.nombre AS proveedor
+  SELECT l.*, mp.nombre AS materia_prima, mp.unidad_medida, ci.codigo AS codigo_item, p.nombre AS proveedor
   FROM LOTE_MATERIA_PRIMA l
   JOIN MATERIA_PRIMA mp ON mp.id_materia_prima = l.id_materia_prima
+  LEFT JOIN CATALOGO_ITEM ci ON ci.id_item = mp.id_item
   JOIN PROVEEDOR p ON p.id_proveedor = l.id_proveedor
   ORDER BY l.id_lote_mp DESC
 `;

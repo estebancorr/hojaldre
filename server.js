@@ -8,6 +8,15 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(async (req, res, next) => {
+  try {
+    await db.ready;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use('/api/proveedores', require('./routes/proveedores'));
 app.use('/api/catalogo-items', require('./routes/catalogoItems'));
 app.use('/api/materias-primas', require('./routes/materiasPrimas'));
@@ -49,13 +58,17 @@ app.use((err, req, res, next) => {
   res.status(400).json({ error: err.message || 'Error inesperado.' });
 });
 
-db.ready
-  .then(() => {
+if (require.main === module) {
+  db.ready
+    .then(() => {
     app.listen(port, () => {
       console.log(`Pan de Tata trazabilidad disponible en http://localhost:${port}`);
     });
-  })
-  .catch((error) => {
-    console.error('No se pudo iniciar la base de datos:', error);
-    process.exit(1);
-  });
+    })
+    .catch((error) => {
+      console.error('No se pudo iniciar la base de datos:', error);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

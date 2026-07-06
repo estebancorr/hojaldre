@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const initSqlJs = require('sql.js');
+const { pdfProducts, pdfExplosions } = require('./pdfCatalogData');
 
 const dbPath = process.env.TRACE_DB_PATH
   ? path.resolve(process.env.TRACE_DB_PATH)
@@ -43,14 +44,288 @@ function slug(value, fallback) {
     .slice(0, 32) || fallback;
 }
 
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const knownRawMaterials = [
+  ['MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL', 'kg', ['HARINA DE TRIGO ESPECIAL']],
+  ['MDMP0263', 'LECHE LIQUIDA ENTERA', 'L', ['LECHE LIQUIDA']],
+  ['MDMP0029', 'MANTEQUILLA TIPO A CON SAL', 'kg'],
+  ['MDMP0002', 'AZUCAR BLANCA REFINADA', 'kg'],
+  ['MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION', 'kg'],
+  ['MDMP0026', 'LEVADURA SECA INSTANTANEA MASA SALADA', 'kg'],
+  ['MDMP0260', 'BOLSA DE HIELO GRANDE', 'kg', ['BOLSA DE HIELO']],
+  ['STMP0002', 'HUEVO LIQUIDO 1 KG', 'kg', ['HUEVOS', 'HUEVO LIQUIDO']],
+  ['STMP0016', 'MANTEQUILLA PDT 1 UND', 'UND'],
+  ['MDMP0179', 'QUESO BLANCO DURO', 'kg'],
+  ['MDMP0012', 'LECHE EN POLVO', 'kg'],
+  ['MDMP0153', 'COCO RALLADO', 'kg'],
+  ['MDMP0037', 'MEJORADOR PURATOS', 'kg'],
+  ['MDMP0034', 'MARGARINA CON SAL 5 KG', 'kg'],
+  ['MDMP0150', 'CACAO EN POLVO', 'kg'],
+  ['MDMP0251', 'CHOCOLATE CON LECHE EN MINI BARRAS', 'kg'],
+  ['MDMP0252', 'CHOCOLATE OSCURO AL 60 % EN MINI BARRAS', 'kg'],
+  ['MDMP0267', 'CREMA DE PISTACHO', 'kg']
+];
+
+const legacyRawMaterialLotLinks = [
+  ['MP-HARINA', 'MDMP0214'],
+  ['MP-MANTEQUILLA', 'MDMP0029'],
+  ['MP-AZUCAR', 'MDMP0002'],
+  ['MP-SAL', 'MDMP0003'],
+  ['MP-LEVADURA', 'MDMP0026'],
+  ['MP-HIELO', 'MDMP0260'],
+  ['MP-LECHE', 'MDMP0263']
+];
+
 function ensureCatalogItem({ codigo, descripcion, tipo_item, unidad_medida, familia }) {
   const existing = rawGet('SELECT id_item FROM CATALOGO_ITEM WHERE codigo = ?', [codigo]);
-  if (existing) return existing.id_item;
+  if (existing) {
+    sqlDb.run(`
+      UPDATE CATALOGO_ITEM
+      SET descripcion = ?, tipo_item = ?, unidad_medida = ?, familia = COALESCE(familia, ?), activo = 1
+      WHERE id_item = ?
+    `, [descripcion, tipo_item, unidad_medida, familia || null, existing.id_item]);
+    return existing.id_item;
+  }
   sqlDb.run(`
     INSERT INTO CATALOGO_ITEM (codigo, descripcion, tipo_item, unidad_medida, familia, activo)
     VALUES (?, ?, ?, ?, ?, 1)
   `, [codigo, descripcion, tipo_item, unidad_medida, familia || null]);
   return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function ensureKnownRawMaterials() {
+  const materias = sqlDb.exec(`
+    SELECT mp.id_materia_prima, mp.nombre, mp.descripcion, ci.codigo
+    FROM MATERIA_PRIMA mp
+    LEFT JOIN CATALOGO_ITEM ci ON ci.id_item = mp.id_item
+  `)[0]?.values || [];
+  const byName = new Map();
+  materias.forEach(([id, nombre, descripcion, codigo]) => {
+    [nombre, descripcion, codigo].forEach((value) => {
+      const key = normalizeName(value);
+      if (key && !byName.has(key)) byName.set(key, id);
+    });
+  });
+
+  knownRawMaterials.forEach(([codigo, descripcion, unidad, aliases = []]) => {
+    const idItem = ensureCatalogItem({
+      codigo,
+      descripcion,
+      tipo_item: 'MP',
+      unidad_medida: unidad,
+      familia: 'INSUMO'
+    });
+    const keys = [codigo, descripcion, ...aliases].map(normalizeName);
+    const existingId = keys.map((key) => byName.get(key)).find(Boolean);
+    const byItem = rawGet('SELECT id_materia_prima FROM MATERIA_PRIMA WHERE id_item = ?', [idItem]);
+
+    if (byItem) {
+      sqlDb.run(`
+        UPDATE MATERIA_PRIMA
+        SET nombre = ?, descripcion = ?, unidad_medida = ?, estado = 'ACTIVA'
+        WHERE id_materia_prima = ?
+      `, [descripcion, descripcion, unidad, byItem.id_materia_prima]);
+      return;
+    }
+
+    if (existingId) {
+      sqlDb.run(`
+        UPDATE MATERIA_PRIMA
+        SET id_item = ?, nombre = ?, descripcion = ?, unidad_medida = ?, estado = 'ACTIVA'
+        WHERE id_materia_prima = ?
+      `, [idItem, descripcion, descripcion, unidad, existingId]);
+      return;
+    }
+
+    sqlDb.run(`
+      INSERT INTO MATERIA_PRIMA (id_item, nombre, descripcion, unidad_medida, temperatura_objetivo, estado)
+      VALUES (?, ?, ?, ?, NULL, 'ACTIVA')
+    `, [idItem, descripcion, descripcion, unidad]);
+  });
+}
+
+function relinkLegacyRawMaterialLots() {
+  legacyRawMaterialLotLinks.forEach(([legacyCode, targetCode]) => {
+    const legacy = rawGet(`
+      SELECT mp.id_materia_prima
+      FROM MATERIA_PRIMA mp
+      JOIN CATALOGO_ITEM ci ON ci.id_item = mp.id_item
+      WHERE ci.codigo = ?
+    `, [legacyCode]);
+    const target = rawGet(`
+      SELECT mp.id_materia_prima
+      FROM MATERIA_PRIMA mp
+      JOIN CATALOGO_ITEM ci ON ci.id_item = mp.id_item
+      WHERE ci.codigo = ?
+    `, [targetCode]);
+    if (!legacy || !target || legacy.id_materia_prima === target.id_materia_prima) return;
+
+    sqlDb.run(`
+      UPDATE LOTE_MATERIA_PRIMA
+      SET id_materia_prima = ?
+      WHERE id_materia_prima = ?
+    `, [target.id_materia_prima, legacy.id_materia_prima]);
+    sqlDb.run(`
+      UPDATE MATERIA_PRIMA
+      SET estado = 'INACTIVA'
+      WHERE id_materia_prima = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM LOTE_MATERIA_PRIMA l
+          WHERE l.id_materia_prima = MATERIA_PRIMA.id_materia_prima
+        )
+    `, [legacy.id_materia_prima]);
+  });
+}
+
+function tipoItemPorCodigo(code) {
+  const overrides = {
+    STMP0002: 'MP',
+    STMP0016: 'MP'
+  };
+  if (overrides[code]) return overrides[code];
+  if (code.startsWith('PT')) return 'PRODUCTO_TERMINADO';
+  if (code.startsWith('MDME')) return 'EMPAQUE';
+  if (code.startsWith('MDMP') || code.startsWith('MEDMP')) return 'MP';
+  if (code.startsWith('STMZ')) return 'RELLENO';
+  if (code.startsWith('GSGE')) return 'OTRO';
+  if (code.startsWith('ST')) return 'SEMIELABORADO';
+  return 'OTRO';
+}
+
+function unidadPorDescripcion(desc, fallback = 'UND') {
+  if (/\bKG\b/i.test(desc)) return 'kg';
+  if (/\bGR\b/i.test(desc)) return 'gr';
+  if (/\bCAJ\b/i.test(desc)) return 'CAJ';
+  if (/\bPAQ\b/i.test(desc)) return 'PAQ';
+  return fallback;
+}
+
+function ensureProductFromCatalog(code, desc, unidad = 'UND', familia = 'HOJALDRE') {
+  const idItem = ensureCatalogItem({ codigo: code, descripcion: desc, tipo_item: 'PRODUCTO_TERMINADO', unidad_medida: unidad, familia });
+  const existing = rawGet('SELECT id_producto FROM PRODUCTO WHERE id_item = ?', [idItem]);
+  if (existing) return existing.id_producto;
+  sqlDb.run(`
+    INSERT INTO PRODUCTO (id_item, nombre, descripcion, categoria, peso_objetivo_unidad, estado)
+    VALUES (?, ?, ?, ?, NULL, 'ACTIVO')
+  `, [idItem, desc, desc, familia]);
+  return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function ensureTipoPreparacionFromCatalog(code, desc) {
+  const type = tipoItemPorCodigo(code);
+  if (['MP', 'EMPAQUE', 'OTRO', 'PRODUCTO_TERMINADO'].includes(type)) return null;
+  const idItem = ensureCatalogItem({
+    codigo: code,
+    descripcion: desc,
+    tipo_item: type,
+    unidad_medida: unidadPorDescripcion(desc, 'kg'),
+    familia: type === 'RELLENO' ? 'RELLENO' : 'HOJALDRE'
+  });
+  const existing = rawGet('SELECT id_tipo_preparacion FROM TIPO_PREPARACION WHERE id_item = ?', [idItem]);
+  if (existing) return existing.id_tipo_preparacion;
+  sqlDb.run(`
+    INSERT INTO TIPO_PREPARACION (id_item, nombre, categoria, descripcion, requiere_receta, estado)
+    VALUES (?, ?, ?, ?, 0, 'ACTIVO')
+  `, [idItem, desc, code, desc]);
+  return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function ensureMateriaPrimaFromCatalog(code, desc) {
+  const idItem = ensureCatalogItem({
+    codigo: code,
+    descripcion: desc,
+    tipo_item: 'MP',
+    unidad_medida: unidadPorDescripcion(desc, 'kg'),
+    familia: 'INSUMO'
+  });
+  const existing = rawGet('SELECT id_materia_prima FROM MATERIA_PRIMA WHERE id_item = ?', [idItem]);
+  if (existing) return existing.id_materia_prima;
+  sqlDb.run(`
+    INSERT INTO MATERIA_PRIMA (id_item, nombre, descripcion, unidad_medida, temperatura_objetivo, estado)
+    VALUES (?, ?, ?, ?, NULL, 'ACTIVA')
+  `, [idItem, desc, desc, unidadPorDescripcion(desc, 'kg')]);
+  return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function ensureRecipeForCode(code, desc) {
+  const item = rawGet('SELECT tipo_item FROM CATALOGO_ITEM WHERE codigo = ?', [code]);
+  if (item?.tipo_item === 'PRODUCTO_TERMINADO') {
+    const productId = ensureProductFromCatalog(code, desc, unidadPorDescripcion(desc, 'UND'), 'HOJALDRE');
+    const existing = rawGet('SELECT id_receta FROM RECETA WHERE id_producto = ? AND nombre_receta = ?', [productId, `${code} v1`]);
+    if (existing) return existing.id_receta;
+    sqlDb.run(`
+      INSERT INTO RECETA (id_producto, id_tipo_preparacion, nombre_receta, version, rendimiento_estimado, activa)
+      VALUES (?, NULL, ?, '1', NULL, 1)
+    `, [productId, `${code} v1`]);
+    return rawGet('SELECT last_insert_rowid() AS id').id;
+  }
+
+  const tipoId = ensureTipoPreparacionFromCatalog(code, desc);
+  const existing = rawGet('SELECT id_receta FROM RECETA WHERE id_tipo_preparacion = ? AND nombre_receta = ?', [tipoId, `${code} v1`]);
+  if (existing) return existing.id_receta;
+  sqlDb.run(`
+    INSERT INTO RECETA (id_producto, id_tipo_preparacion, nombre_receta, version, rendimiento_estimado, activa)
+    VALUES (NULL, ?, ?, '1', NULL, 1)
+  `, [tipoId, `${code} v1`]);
+  return rawGet('SELECT last_insert_rowid() AS id').id;
+}
+
+function linkRecipe(parentCode, parentDesc, childCode, childDesc) {
+  ensureCatalogItem({
+    codigo: parentCode,
+    descripcion: parentDesc,
+    tipo_item: tipoItemPorCodigo(parentCode),
+    unidad_medida: unidadPorDescripcion(parentDesc, 'UND'),
+    familia: 'HOJALDRE'
+  });
+  const childType = tipoItemPorCodigo(childCode);
+  const childItemId = ensureCatalogItem({
+    codigo: childCode,
+    descripcion: childDesc,
+    tipo_item: childType,
+    unidad_medida: unidadPorDescripcion(childDesc, childType === 'EMPAQUE' ? 'UND' : 'kg'),
+    familia: childType === 'RELLENO' ? 'RELLENO' : childType === 'EMPAQUE' ? 'EMPAQUE' : 'HOJALDRE'
+  });
+  if (childType === 'MP') ensureMateriaPrimaFromCatalog(childCode, childDesc);
+  if (['SEMIELABORADO', 'RELLENO'].includes(childType)) ensureTipoPreparacionFromCatalog(childCode, childDesc);
+  const recetaId = ensureRecipeForCode(parentCode, parentDesc);
+  const exists = rawGet('SELECT id_detalle_receta FROM DETALLE_RECETA WHERE id_receta = ? AND id_item = ?', [recetaId, childItemId]);
+  if (exists) return;
+  sqlDb.run(`
+    INSERT INTO DETALLE_RECETA
+    (id_receta, id_item, tipo_insumo, id_materia_prima, id_tipo_preparacion, cantidad_estandar, unidad_medida, tolerancia)
+    VALUES (?, ?, ?, NULL, NULL, 1, ?, 0)
+  `, [
+    recetaId,
+    childItemId,
+    ['SEMIELABORADO', 'RELLENO', 'PRODUCTO_TERMINADO'].includes(childType) ? 'PREPARACION' : 'MP',
+    unidadPorDescripcion(childDesc, 'UND')
+  ]);
+  const detalleId = rawGet('SELECT last_insert_rowid() AS id').id;
+  sqlDb.run(`
+    INSERT INTO EXPLOSION_MATERIALES
+    (id_receta, id_item, id_detalle_receta, cantidad_requerida, unidad_medida, nivel, activo)
+    VALUES (?, ?, ?, 1, ?, 1, 1)
+  `, [recetaId, childItemId, detalleId, unidadPorDescripcion(childDesc, 'UND')]);
+}
+
+function ensurePdfCatalogData() {
+  pdfProducts.forEach(([code, desc, unidad, familia]) => {
+    if (code.startsWith('PT')) ensureProductFromCatalog(code, desc, unidad, familia);
+    else ensureTipoPreparacionFromCatalog(code, desc);
+  });
+  pdfExplosions.forEach(([parentCode, parentDesc, childCode, childDesc]) => {
+    linkRecipe(parentCode, parentDesc, childCode, childDesc);
+  });
 }
 
 function ensureCatalogColumns() {
@@ -110,6 +385,9 @@ function ensureCatalogColumns() {
     WHERE id_item IS NULL AND id_tipo_preparacion IS NOT NULL
   `);
   sqlDb.run('CREATE INDEX IF NOT EXISTS idx_detalle_receta_item ON DETALLE_RECETA(id_item)');
+  ensureKnownRawMaterials();
+  relinkLegacyRawMaterialLots();
+  ensurePdfCatalogData();
 }
 
 function rawGet(sql, params = []) {

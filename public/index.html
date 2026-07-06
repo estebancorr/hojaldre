@@ -17,8 +17,8 @@
         <button class="nav" data-view="catalogo">Catalogo</button>
         <button class="nav" data-view="materias">MP</button>
         <button class="nav" data-view="explosion">Explosion materiales</button>
-        <button class="nav" data-view="preparaciones">Preparaciones</button>
         <button class="nav" data-view="ordenes">Ordenes</button>
+        <button class="nav" data-view="preparaciones">Preparaciones</button>
         <button class="nav" data-view="trazabilidad">Trazabilidad</button>
         <button class="nav" data-view="calidad">Control calidad</button>
       </nav>
@@ -88,6 +88,7 @@
           <form id="materia-form" class="panel">
             <h2>Registrar materia prima</h2>
             <div class="form-grid">
+              <label>Codigo MP <input name="codigo" placeholder="MDMP0214" required></label>
               <label>Nombre <input name="nombre" required></label>
               <label>Unidad <input name="unidad_medida" placeholder="kg" required></label>
               <label>Temperatura objetivo <input name="temperatura_objetivo" type="number" step="0.01"></label>
@@ -124,7 +125,7 @@
 
       <section id="explosion" class="view">
         <form id="explosion-form" class="panel inline">
-          <label>Codigo producto <input id="explosion-code" placeholder="PTSU0046" required></label>
+          <label>Codigo de item <input id="explosion-code" placeholder="PTSU0046" required></label>
           <button>Buscar</button>
         </form>
         <div class="panel">
@@ -134,29 +135,8 @@
       </section>
 
       <section id="preparaciones" class="view">
-        <form id="stock-form" class="panel wide">
-          <div class="form-heading">
-            <h2>Generar lote para stock general</h2>
-            <span class="badge">ST | Sin orden</span>
-          </div>
-          <div class="form-grid stock-grid">
-            <label>Resultado <select name="id_tipo_preparacion" id="stock-tipo" required></select></label>
-            <label>Peso total resultante (kg) <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
-          </div>
-          <div class="origins-head">
-            <div>
-              <h3>Lotes que se unen</h3>
-              <small id="stock-origin-total" class="muted">Total seleccionado: 0 kg</small>
-            </div>
-            <button type="button" id="add-stock-origin" class="secondary">Agregar lote</button>
-          </div>
-          <div id="stock-origenes"></div>
-          <label>Observaciones <textarea name="observaciones"></textarea></label>
-          <button>Generar lote de stock</button>
-        </form>
-
         <div class="panel">
-          <h2>Preparaciones disponibles sin orden</h2>
+          <h2>Lotes intermedios disponibles</h2>
           <div id="tabla-stock"></div>
         </div>
       </section>
@@ -172,9 +152,8 @@
           <form id="orden-form" class="panel">
             <h2>Nueva orden</h2>
             <div class="form-grid">
-              <label>Producto <select name="id_producto" id="orden-producto" required></select></label>
+              <label>Producto a fabricar <select name="id_producto" id="orden-producto" required></select></label>
               <label>Cantidad objetivo <input name="cantidad_objetivo" type="number" step="0.001" required></label>
-              <label>Unidad <input name="unidad_medida" value="kg" required></label>
               <label>Fecha <input name="fecha_programada" type="date" required></label>
               <label>Responsable <input name="responsable"></label>
             </div>

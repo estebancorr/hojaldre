@@ -35,6 +35,11 @@ function codigo(value) {
 }
 
 function tipoItemPorCodigo(code) {
+  const overrides = {
+    STMP0002: 'MP',
+    STMP0016: 'MP'
+  };
+  if (overrides[code]) return overrides[code];
   if (code.startsWith('PT')) return 'PRODUCTO_TERMINADO';
   if (code.startsWith('MDME')) return 'EMPAQUE';
   if (code.startsWith('MDMP') || code.startsWith('MEDMP')) return 'MP';
@@ -81,6 +86,7 @@ function ensureProductFromCatalog(code, desc, unidad = 'UND', familia = 'HOJALDR
 
 function ensureTipoPreparacionFromCatalog(code, desc) {
   const tipo = tipoItemPorCodigo(code);
+  if (tipo === 'MP' || tipo === 'EMPAQUE' || tipo === 'OTRO') return null;
   const idItem = ensureCatalogItem(code, desc, { tipo_item: tipo, unidad_medida: unidadPorDescripcion(desc, 'kg'), familia: tipo === 'RELLENO' ? 'RELLENO' : 'HOJALDRE' });
   const existing = db.prepare('SELECT id_tipo_preparacion FROM TIPO_PREPARACION WHERE id_item = ?').get(idItem);
   if (existing) return existing.id_tipo_preparacion;
@@ -145,7 +151,7 @@ function linkRecipe(parentCode, parentDesc, childCode, childDesc) {
     unidad_medida: unidadPorDescripcion(childDesc, childType === 'EMPAQUE' ? 'UND' : 'kg'),
     familia: childType === 'RELLENO' ? 'RELLENO' : childType === 'EMPAQUE' ? 'EMPAQUE' : 'HOJALDRE'
   });
-  if (childType === 'MP' || childType === 'EMPAQUE' || childType === 'OTRO') ensureMateriaPrimaFromCatalog(childCode, childDesc);
+  if (childType === 'MP') ensureMateriaPrimaFromCatalog(childCode, childDesc);
   if (['SEMIELABORADO', 'RELLENO'].includes(childType)) ensureTipoPreparacionFromCatalog(childCode, childDesc);
   const recetaId = ensureRecipeForCode(parentCode, parentDesc);
   const exists = db.prepare('SELECT id_detalle_receta FROM DETALLE_RECETA WHERE id_receta = ? AND id_item = ?').get(recetaId, childItemId);
@@ -203,26 +209,36 @@ const seed = db.transaction(() => {
 
   const mp = {};
   [
-    ['Mantequilla', 'kg', 'MP-MANT-001', 25],
-    ['Harina', 'kg', 'MP-HAR-001', 50],
-    ['Agua', 'L', 'MP-AGUA-001', 100],
-    ['Sal', 'kg', 'MP-SAL-001', 10],
-    ['Azucar', 'kg', 'MP-AZU-001', 15]
-  ].forEach(([nombre, unidad, loteInterno, peso]) => {
-    const idItem = insert('CATALOGO_ITEM', {
-      codigo: `MP-${codigo(nombre)}`,
-      descripcion: nombre,
-      tipo_item: 'MP',
+    ['MDMP0029', 'MANTEQUILLA TIPO A CON SAL', 'kg', 25, 'Mantequilla'],
+    ['MDMP0214', 'HARINA DE TRIGO EXTRA ESPECIAL', 'kg', 50, 'Harina'],
+    ['MDMP0263', 'LECHE LIQUIDA ENTERA', 'L', 30, 'Leche'],
+    ['MDMP0003', 'SAL INDUSTRIAL PARA PRODUCCION', 'kg', 10, 'Sal'],
+    ['MDMP0002', 'AZUCAR BLANCA REFINADA', 'kg', 15, 'Azucar'],
+    ['MDMP0026', 'LEVADURA SECA INSTANTANEA MASA SALADA', 'kg', 5, 'Levadura'],
+    ['MDMP0260', 'BOLSA DE HIELO GRANDE', 'kg', 20, 'Hielo'],
+    ['STMP0002', 'HUEVO LIQUIDO 1 KG', 'kg', 12, 'Huevo liquido'],
+    ['STMP0016', 'MANTEQUILLA PDT 1 UND', 'UND', 12, 'Mantequilla pdt'],
+    ['MDMP0179', 'QUESO BLANCO DURO', 'kg', 20, 'Queso blanco duro'],
+    ['MDMP0012', 'LECHE EN POLVO', 'kg', 10, 'Leche en polvo'],
+    ['MDMP0153', 'COCO RALLADO', 'kg', 8, 'Coco rallado'],
+    ['MDMP0037', 'MEJORADOR PURATOS', 'kg', 5, 'Mejorador'],
+    ['MDMP0034', 'MARGARINA CON SAL 5 KG', 'kg', 20, 'Margarina'],
+    ['MDMP0150', 'CACAO EN POLVO', 'kg', 5, 'Cacao'],
+    ['MDMP0251', 'CHOCOLATE CON LECHE EN MINI BARRAS', 'kg', 8, 'Chocolate leche'],
+    ['MDMP0252', 'CHOCOLATE OSCURO AL 60 % EN MINI BARRAS', 'kg', 8, 'Chocolate oscuro'],
+    ['MDMP0267', 'CREMA DE PISTACHO', 'kg', 8, 'Crema pistacho']
+  ].forEach(([codigoItem, nombre, unidad, peso, alias]) => {
+    const idItem = ensureCatalogItem(codigoItem, nombre, {
+      tipo_item: tipoItemPorCodigo(codigoItem),
       unidad_medida: unidad,
-      familia: 'Materia prima',
-      activo: 1
+      familia: 'INSUMO'
     });
     const id = insert('MATERIA_PRIMA', { id_item: idItem, nombre, descripcion: nombre, unidad_medida: unidad, temperatura_objetivo: null, estado: 'ACTIVA' });
     const loteId = insert('LOTE_MATERIA_PRIMA', {
       id_materia_prima: id,
       id_proveedor: proveedor,
-      lote_proveedor: `PROV-${loteInterno}`,
-      lote_interno: loteInterno,
+      lote_proveedor: `PROV-${codigoItem}-001`,
+      lote_interno: `PROV-${codigoItem}-001`,
       fecha_recepcion: today,
       fecha_vencimiento: future,
       peso_recibido: peso,
@@ -231,7 +247,7 @@ const seed = db.transaction(() => {
       estado: 'DISPONIBLE',
       observaciones: 'Seed inicial'
     });
-    mp[nombre] = { id, loteId };
+    mp[alias] = { id, loteId };
   });
 
   const itemProducto = insert('CATALOGO_ITEM', {
@@ -372,9 +388,10 @@ const seed = db.transaction(() => {
   const empMant = crearLote({ prefijo: 'EMP-MANT', tipoNombre: 'Mantequilla empastada', fase: 'Preparacion mantequilla empastada', cantidad: 5, origenes: [{ tipo: 'MP', id: mp.Mantequilla.loteId, cantidad: 5 }], obs: 'Mantequilla empastada demo' });
   const masaB = crearLote({ prefijo: 'MASA-B', tipoNombre: 'Masa tipo B', fase: 'Preparacion de masa', cantidad: 15, origenes: [
     { tipo: 'MP', id: mp.Harina.loteId, cantidad: 10 },
-    { tipo: 'MP', id: mp.Agua.loteId, cantidad: 5, unidad: 'L' },
+    { tipo: 'MP', id: mp.Leche.loteId, cantidad: 5, unidad: 'L' },
     { tipo: 'MP', id: mp.Sal.loteId, cantidad: 0.2 },
-    { tipo: 'MP', id: mp.Azucar.loteId, cantidad: 1 }
+    { tipo: 'MP', id: mp.Azucar.loteId, cantidad: 1 },
+    { tipo: 'MP', id: mp.Levadura.loteId, cantidad: 0.2 }
   ], obs: 'Masa tipo B demo' });
   const masaEmp = crearLote({ prefijo: 'MASA-EMP', tipoNombre: 'Masa empastada', fase: 'Empaste', cantidad: 20, origenes: [{ tipo: 'PROD', id: masaB, cantidad: 15 }, { tipo: 'PROD', id: empMant, cantidad: 5 }], obs: 'Empaste demo' });
   const lam = crearLote({ prefijo: 'LAM-HOJ', tipoNombre: 'Masa laminada', fase: 'Laminado', cantidad: 20, origenes: [{ tipo: 'PROD', id: masaEmp, cantidad: 20 }], obs: 'Laminado demo' });
@@ -426,6 +443,7 @@ const seed = db.transaction(() => {
     ['PTEM0135', 'TEQUENOS 30 UND', 'STPC0029', 'TEQUENOS 1 UND'],
     ['PTEM0135', 'TEQUENOS 30 UND', 'MDME0053', 'BOLSA AL VACIO TRANSPARENTE 28X70CM 1000 UND'],
     ['PTEM0135', 'TEQUENOS 30 UND', 'MDME0094', 'BANDEJA DE ANIME TIPO P'],
+    ['PTEM0135', 'TEQUENOS 30 UND', 'MDME0105', 'ETIQUETA DE PRODUCTO'],
     ['PTSU0083', 'CRUFFIN DE CAFE Y AVELLANAS 1 UND', 'STPC0024', 'CRUFFIN CONGELADO 1 UND ST'],
     ['PTSU0083', 'CRUFFIN DE CAFE Y AVELLANAS 1 UND', 'STMZ0084', 'RELLENO DE CREMA DE AVELLANA Y CAFE'],
     ['PTSU0082', 'CRUFFIN DE PISTACHOS 1 UND', 'STPC0024', 'CRUFFIN CONGELADO 1 UND ST'],

@@ -61,7 +61,9 @@ function formData(form) {
   Object.keys(data).forEach((key) => {
     if (data[key] === '') data[key] = null;
     if (key.startsWith('id_') && data[key] !== null) data[key] = Number(data[key]);
-    if (['peso_recibido', 'temperatura_objetivo', 'cantidad_objetivo', 'temperatura_masa', 'peso_total', 'peso_por_porcion', 'duracion_amasado_seg'].includes(key) && data[key] !== null) data[key] = Number(data[key]);
+    if (['peso_recibido', 'temperatura_objetivo', 'cantidad_objetivo', 'temperatura_masa', 'peso_total', 'peso_por_porcion', 'duracion_amasado_seg'].includes(key) && data[key] !== null) {
+      data[key] = normalizeNumberText(data[key]);
+    }
   });
   return data;
 }
@@ -148,6 +150,7 @@ function renderExplosionResult(data) {
       { label: 'Descripcion', key: 'descripcion' },
       { label: 'Tipo', key: 'tipo_item' },
       { label: 'Cantidad', render: (r) => `${r.cantidad} ${r.unidad}` },
+      { label: 'Disponible', render: (r) => `${r.disponible ?? 0} ${r.unidad_disponible || r.unidad || ''}` },
       { label: 'Nivel', key: 'nivel' }
     ])}
     <button type="button" id="explosion-to-order" class="secondary">Generar orden</button>
@@ -167,7 +170,6 @@ function renderExplosionResult(data) {
 function renderSelects() {
   fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.codigo_item || 'MP'} - ${r.nombre} (${r.unidad_medida})`);
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
-  fillSelect('#stock-tipo', state.tipos.filter((r) => r.nombre !== 'Producto terminado'), 'id_tipo_preparacion', (r) => `${r.codigo_item || r.categoria || 'ST'} - ${r.nombre}`, false);
   fillSelect('#orden-producto', state.productos, 'id_producto', (r) => `${r.codigo_item || 'PT'} - ${r.nombre}`);
   fillSelect('#tr-orden', state.ordenes, 'id_orden', (r) => r.codigo_orden, false);
   fillSelect('#tr-fase', state.fases.filter((r) => !['Recepcion materia prima', 'Generacion de lote para stock'].includes(r.nombre_fase)), 'id_fase', (r) => r.nombre_fase, false);
@@ -178,10 +180,12 @@ function renderSelects() {
 }
 
 function renderStock() {
-  const rows = state.lotesProd.filter((row) => row.codigo_orden === 'STOCK-GENERAL');
+  const rows = state.lotesProd.filter((row) => row.tipo_lote !== 'PRODUCTO_TERMINADO' && Number(row.cantidad_actual) > 0);
   $('#tabla-stock').innerHTML = table(rows, [
     { label: 'Codigo', key: 'codigo_lote' },
     { label: 'Preparacion', key: 'tipo_preparacion' },
+    { label: 'Orden', key: 'codigo_orden' },
+    { label: 'Fase', key: 'nombre_fase' },
     { label: 'Disponible', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` },
     { label: 'Creacion', render: (r) => formatDate(r.fecha_creacion) },
     { label: 'Estado', key: 'estado' }
@@ -221,7 +225,7 @@ function renderDashboard() {
 
 function renderMaterias() {
   $('#tabla-materias').innerHTML = table(state.materias, [
-    { label: 'Codigo item', key: 'codigo_item' },
+    { label: 'Codigo MP', key: 'codigo_item' },
     { label: 'Materia prima', key: 'nombre' },
     { label: 'Descripcion', key: 'descripcion' },
     { label: 'Unidad', key: 'unidad_medida' },
@@ -229,6 +233,7 @@ function renderMaterias() {
     { label: 'Estado', key: 'estado' }
   ]);
   $('#tabla-mp').innerHTML = table(state.lotesMp, [
+    { label: 'Codigo MP', key: 'codigo_item' },
     { label: 'Lote proveedor', key: 'lote_proveedor' },
     { label: 'Materia', key: 'materia_prima' },
     { label: 'Proveedor', key: 'proveedor' },
@@ -308,7 +313,7 @@ function updateOriginLotSelect(row) {
   select.innerHTML = lots.map((lot) => {
     const value = type === 'MP' ? lot.id_lote_mp : lot.id_lote_prod;
     const label = type === 'MP'
-      ? `${lot.lote_proveedor} - ${lot.materia_prima} - ${lot.proveedor} (${lot.peso_disponible})`
+      ? `${lot.codigo_item || 'MP'} - ${lot.lote_proveedor} - ${lot.materia_prima} - ${lot.proveedor} (${lot.peso_disponible})`
       : `${lot.codigo_lote} - ${lot.tipo_preparacion || lot.tipo_lote} (${lot.cantidad_actual})`;
     return `<option value="${value}">${label}</option>`;
   }).join('');
@@ -330,6 +335,30 @@ function calcWeights(context = 'order') {
   output.textContent = `Total seleccionado: ${total.toFixed(3)} kg`;
 }
 
+function normalizeNumberText(value) {
+  return Number(String(value || '').replace(',', '.'));
+}
+
+function trimNumber(value) {
+  return String(Number(value.toFixed(6)));
+}
+
+function scaleOriginsToOutput(form) {
+  const target = normalizeNumberText(form.querySelector('[name="peso_total"]')?.value);
+  if (!Number.isFinite(target) || target <= 0) return false;
+  const inputs = [...form.querySelectorAll('.origin-qty')];
+  const total = inputs.reduce((sum, input) => sum + normalizeNumberText(input.value || 0), 0);
+  if (!Number.isFinite(total) || total <= 0 || target <= total + 0.000001) return false;
+
+  const factor = target / total;
+  inputs.forEach((input) => {
+    const current = normalizeNumberText(input.value || 0);
+    if (Number.isFinite(current) && current > 0) input.value = trimNumber(current * factor);
+  });
+  calcWeights(form.id === 'stock-form' ? 'stock' : 'order');
+  return true;
+}
+
 function originsPayload(form) {
   return [...form.querySelectorAll('.origin-row')].map((row) => {
     const tipo = row.querySelector('.origin-type').value;
@@ -337,7 +366,7 @@ function originsPayload(form) {
       tipo_lote_origen: tipo,
       id_lote_mp_origen: tipo === 'MP' ? Number(row.querySelector('.origin-lot').value) : null,
       id_lote_prod_origen: tipo === 'PROD' ? Number(row.querySelector('.origin-lot').value) : null,
-      cantidad_consumida: Number(row.querySelector('.origin-qty').value),
+      cantidad_consumida: normalizeNumberText(row.querySelector('.origin-qty').value),
       unidad_medida: row.querySelector('.origin-unit').value || 'kg'
     };
   });
@@ -573,6 +602,7 @@ function bindForms() {
     event.preventDefault();
     const form = event.currentTarget;
     try {
+      const scaled = scaleOriginsToOutput(form);
       await api('/api/transformaciones', { method: 'POST', body: JSON.stringify(transformationPayload(form)) });
       form.reset();
       $('#origenes').innerHTML = '';
@@ -580,28 +610,31 @@ function bindForms() {
       resetMixingTimer();
       await loadAll();
       document.querySelector('[data-panel="orden-lotes"]').click();
-      setStatus('Lote generado automaticamente');
+      setStatus(scaled ? 'Cantidades ajustadas al peso total y lote generado automaticamente' : 'Lote generado automaticamente');
     } catch (error) {
       setStatus(error.message, true);
     }
   });
 
-  $('#stock-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    try {
-      const data = formData(form);
-      data.consumos = originsPayload(form);
-      const created = await api('/api/lotes-stock', { method: 'POST', body: JSON.stringify(data) });
-      form.reset();
-      $('#stock-origenes').innerHTML = '';
-      addOriginRow('stock-origenes', 'stock');
-      await loadAll();
-      setStatus(`Lote ${created.codigo_lote} generado para stock general`);
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
+  const stockForm = $('#stock-form');
+  if (stockForm) {
+    stockForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = formData(form);
+        data.consumos = originsPayload(form);
+        const created = await api('/api/lotes-stock', { method: 'POST', body: JSON.stringify(data) });
+        form.reset();
+        $('#stock-origenes').innerHTML = '';
+        addOriginRow('stock-origenes', 'stock');
+        await loadAll();
+        setStatus(`Lote ${created.codigo_lote} generado para stock general`);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+  }
 
   $('#trace-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -689,5 +722,5 @@ document.addEventListener('change', (event) => {
 $('#refresh').addEventListener('click', loadAll);
 bindForms();
 addOriginRow();
-addOriginRow('stock-origenes', 'stock');
+if ($('#stock-origenes')) addOriginRow('stock-origenes', 'stock');
 loadAll();
