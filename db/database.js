@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const initSqlJs = require('sql.js');
+const { Pool } = require('pg');
 const { pdfProducts, pdfExplosions } = require('./pdfCatalogData');
 
 const dbPath = process.env.TRACE_DB_PATH
@@ -10,6 +12,69 @@ const schemaPath = path.join(__dirname, 'schema.sql');
 
 let sqlDb = null;
 let inTransaction = false;
+const shouldHydrateFromNeon = Boolean(process.env.DATABASE_URL && (process.env.VERCEL || process.env.USE_NEON_RUNTIME === '1'));
+const disablePersist = Boolean(process.env.VERCEL || process.env.DISABLE_SQLITE_PERSIST === '1');
+
+const hydrateTables = [
+  'PROVEEDOR',
+  'CATALOGO_ITEM',
+  'MATERIA_PRIMA',
+  'PRODUCTO',
+  'TIPO_PREPARACION',
+  'RECETA',
+  'DETALLE_RECETA',
+  'EXPLOSION_MATERIALES',
+  'ORDEN_PRODUCCION',
+  'FASE_PRODUCCION',
+  'LOTE_MATERIA_PRIMA',
+  'LOTE_PRODUCCION',
+  'OPERARIO',
+  'EQUIPO',
+  'REGISTRO_FASE',
+  'CONSUMO_LOTE',
+  'CONTROL_CALIDAD'
+];
+
+function pgPool() {
+  return new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL?.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+  });
+}
+
+function sqliteColumns(table) {
+  const result = sqlDb.exec(`PRAGMA table_info(${table})`);
+  return (result[0]?.values || []).map((row) => row[1]);
+}
+
+function insertSqliteRow(table, row) {
+  const columns = sqliteColumns(table).filter((column) => Object.prototype.hasOwnProperty.call(row, column));
+  if (!columns.length) return;
+  sqlDb.run(
+    `INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`,
+    columns.map((column) => row[column])
+  );
+}
+
+async function hydrateFromNeon() {
+  if (!shouldHydrateFromNeon) return;
+
+  const pool = pgPool();
+  const client = await pool.connect();
+  try {
+    sqlDb.run('PRAGMA foreign_keys = OFF');
+    [...hydrateTables].reverse().forEach((table) => sqlDb.run(`DELETE FROM ${table}`));
+
+    for (const table of hydrateTables) {
+      const result = await client.query(`SELECT * FROM ${table.toLowerCase()} ORDER BY 1 ASC`);
+      result.rows.forEach((row) => insertSqliteRow(table, row));
+    }
+    sqlDb.run('PRAGMA foreign_keys = ON');
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
 
 function ensureRegistroFaseColumns() {
   const result = sqlDb.exec('PRAGMA table_info(REGISTRO_FASE)');
@@ -447,6 +512,7 @@ function ensureReady() {
 function persist() {
   ensureReady();
   if (inTransaction) return;
+  if (disablePersist) return;
   fs.writeFileSync(dbPath, Buffer.from(sqlDb.export()));
 }
 
@@ -493,12 +559,13 @@ class PreparedStatement {
 const api = {
   ready: initSqlJs({
     locateFile: (file) => path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', file)
-  }).then((SQL) => {
-    const existing = fs.existsSync(dbPath) ? fs.readFileSync(dbPath) : null;
+  }).then(async (SQL) => {
+    const existing = !shouldHydrateFromNeon && fs.existsSync(dbPath) ? fs.readFileSync(dbPath) : null;
     sqlDb = existing ? new SQL.Database(existing) : new SQL.Database();
     sqlDb.run('PRAGMA foreign_keys = ON');
     sqlDb.run(fs.readFileSync(schemaPath, 'utf8'));
     ensureRegistroFaseColumns();
+    await hydrateFromNeon();
     ensureCatalogColumns();
     ensureSystemData();
     ensureCatalogColumns();
