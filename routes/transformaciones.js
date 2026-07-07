@@ -15,6 +15,10 @@ function num(value) {
   return Number(String(value ?? '').replace(',', '.'));
 }
 
+function unit(value) {
+  return String(value || 'kg').trim();
+}
+
 function generateLotCode(prefix) {
   const cleanPrefix = String(prefix || 'LOTE').trim().toUpperCase();
   const base = `${cleanPrefix}-${codeDate()}`;
@@ -89,7 +93,7 @@ function resolveOutput(data) {
 function validate(data) {
   if (!data.id_orden) throw new Error('No se puede crear lote sin orden de produccion.');
   if (!data.id_fase) throw new Error('Debe seleccionar una fase.');
-  if (!data.peso_total || num(data.peso_total) <= 0) throw new Error('El peso total debe ser mayor a cero.');
+  if (!data.peso_total || num(data.peso_total) <= 0) throw new Error('La cantidad de salida debe ser mayor a cero.');
   if (!Array.isArray(data.consumos) || data.consumos.length === 0) throw new Error('Debe agregar al menos un lote de origen.');
   data.consumos.forEach((consumo) => {
     if (!consumo.cantidad_consumida || num(consumo.cantidad_consumida) <= 0) throw new Error('Las cantidades consumidas deben ser mayores a cero.');
@@ -99,7 +103,7 @@ function validate(data) {
   const tipoSalida = output.preparation;
   const rules = rulesByPhase[output.phase.nombre_fase.toLowerCase()] || {};
   if (rules.temperature && data.temperatura_masa == null) throw new Error('Debe registrar la temperatura para esta fase.');
-  if (rules.portion && (!data.peso_por_porcion || num(data.peso_por_porcion) <= 0)) throw new Error('El peso por porcion debe ser mayor a cero.');
+  if (rules.portion && (!data.peso_por_porcion || num(data.peso_por_porcion) <= 0)) throw new Error('La cantidad por porcion debe ser mayor a cero.');
   if (rules.timer && (!data.hora_inicio || !data.hora_fin || !data.duracion_amasado_seg)) {
     throw new Error('Debe iniciar y finalizar el amasado antes de guardar.');
   }
@@ -126,8 +130,13 @@ const crearTransformacion = db.transaction((data) => {
   const codigo = generateLotCode(output.prefix);
   const pesoEntrada = Number(data.consumos.reduce((sum, c) => sum + num(c.cantidad_consumida || 0), 0));
   const pesoSalida = num(data.peso_total);
-  if (pesoSalida > pesoEntrada) throw new Error('El peso total no puede superar la cantidad consumida de los lotes origen.');
-  const merma = Number((pesoEntrada - pesoSalida).toFixed(3));
+  const unidadSalida = unit(data.unidad_salida);
+  const unidadesEntrada = data.consumos.map((c) => unit(c.unidad_medida));
+  const unidadesComparables = unidadesEntrada.length > 0 && unidadesEntrada.every((entrada) => entrada === unidadSalida);
+  if (unidadesComparables && pesoSalida > pesoEntrada) {
+    throw new Error('La cantidad de salida no puede superar la cantidad consumida de los lotes origen.');
+  }
+  const merma = unidadesComparables ? Number((pesoEntrada - pesoSalida).toFixed(3)) : 0;
   const temperatura = data.temperatura_masa == null ? null : num(data.temperatura_masa);
   const pesoPorPorcion = data.peso_por_porcion == null ? null : num(data.peso_por_porcion);
   const duracion = data.duracion_amasado_seg == null ? null : num(data.duracion_amasado_seg);
@@ -146,7 +155,7 @@ const crearTransformacion = db.transaction((data) => {
     tipo_lote: output.tipo_lote,
     fecha_creacion: fecha,
     cantidad_actual: pesoSalida,
-    unidad_medida: 'kg',
+    unidad_medida: unidadSalida,
     estado: 'DISPONIBLE',
     observaciones: data.observaciones || ''
   });
@@ -206,7 +215,7 @@ const crearTransformacion = db.transaction((data) => {
       consumo.tipo_lote_origen === 'PROD' ? consumo.id_lote_prod_origen : null,
       idLoteDestino,
       cantidad,
-      consumo.unidad_medida || 'kg',
+      unit(consumo.unidad_medida),
       fecha
     );
   });

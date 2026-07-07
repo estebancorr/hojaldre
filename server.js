@@ -43,7 +43,7 @@ app.get('/api/equipos', (req, res) => {
 
 app.get('/api/registros-fase', (req, res) => {
   res.json(db.prepare(`
-    SELECT rf.*, o.codigo_orden, f.nombre_fase, l.codigo_lote, l.tipo_lote
+    SELECT rf.*, o.codigo_orden, f.nombre_fase, l.codigo_lote, l.tipo_lote, l.unidad_medida
     FROM REGISTRO_FASE rf
     JOIN ORDEN_PRODUCCION o ON o.id_orden = rf.id_orden
     JOIN FASE_PRODUCCION f ON f.id_fase = rf.id_fase

@@ -238,6 +238,43 @@ form > button {
   border-bottom: 1px solid var(--line);
 }
 
+.workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #40505c;
+}
+
+.workflow-step strong {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: #fff;
+  background: #40505c;
+}
+
+.workflow-step.active strong {
+  background: var(--accent);
+}
+
+.workflow-step span {
+  min-width: 0;
+  font-weight: 700;
+}
+
 .tab {
   color: #40505c;
   background: transparent;
@@ -359,7 +396,7 @@ th {
 
 .origin-row {
   display: grid;
-  grid-template-columns: 90px 1fr 130px 90px 90px;
+  grid-template-columns: 76px minmax(120px, 0.7fr) minmax(220px, 1.3fr) 120px 100px 90px;
   gap: 8px;
   margin-bottom: 8px;
   min-width: 0;
@@ -533,7 +570,7 @@ th {
   }
 
   .origin-row {
-    grid-template-columns: 76px minmax(220px, 1fr) 110px 78px 84px;
+    grid-template-columns: 74px minmax(110px, 0.7fr) minmax(180px, 1.3fr) 100px 86px 84px;
   }
 }
 
@@ -685,7 +722,8 @@ th {
   .cards,
   .grid.two,
   .form-grid,
-  .process-grid {
+  .process-grid,
+  .workflow-strip {
     grid-template-columns: 1fr;
   }
 

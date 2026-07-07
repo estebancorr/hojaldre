@@ -18,7 +18,7 @@
         <button class="nav" data-view="materias">MP</button>
         <button class="nav" data-view="explosion">Explosion materiales</button>
         <button class="nav" data-view="ordenes">Ordenes</button>
-        <button class="nav" data-view="preparaciones">Preparaciones</button>
+        <button class="nav" data-view="preparaciones">Semiterminados</button>
         <button class="nav" data-view="trazabilidad">Trazabilidad</button>
         <button class="nav" data-view="calidad">Control calidad</button>
       </nav>
@@ -51,7 +51,7 @@
                 <option value="OTRO">Otro</option>
               </select>
             </label>
-            <label>Unidad <input name="unidad_medida" placeholder="kg" required></label>
+            <label>Unidad <select name="unidad_medida" id="catalogo-unidad" required></select></label>
             <label>Familia <input name="familia"></label>
           </div>
           <button>Guardar item</button>
@@ -90,7 +90,7 @@
             <div class="form-grid">
               <label>Codigo MP <input name="codigo" placeholder="MDMP0214" required></label>
               <label>Nombre <input name="nombre" required></label>
-              <label>Unidad <input name="unidad_medida" placeholder="kg" required></label>
+              <label>Unidad <select name="unidad_medida" id="materia-unidad" required></select></label>
               <label>Temperatura objetivo <input name="temperatura_objetivo" type="number" step="0.01"></label>
             </div>
             <label>Descripcion <textarea name="descripcion"></textarea></label>
@@ -136,12 +136,27 @@
 
       <section id="preparaciones" class="view">
         <div class="panel">
-          <h2>Lotes intermedios disponibles</h2>
+          <h2>Lotes semiterminados disponibles</h2>
           <div id="tabla-stock"></div>
         </div>
       </section>
 
       <section id="ordenes" class="view">
+        <div class="workflow-strip">
+          <div class="workflow-step active">
+            <strong>1</strong>
+            <span>Crear orden</span>
+          </div>
+          <div class="workflow-step">
+            <strong>2</strong>
+            <span>Registrar fase</span>
+          </div>
+          <div class="workflow-step">
+            <strong>3</strong>
+            <span>Generar lote ST/PT</span>
+          </div>
+        </div>
+
         <div class="tabs" data-tabs="ordenes">
           <button class="tab active" data-panel="orden-listado">Ordenes</button>
           <button class="tab" data-panel="orden-amasado">Registrar fase</button>
@@ -152,8 +167,14 @@
           <form id="orden-form" class="panel">
             <h2>Nueva orden</h2>
             <div class="form-grid">
+              <label>Buscar producto
+                <input id="orden-producto-search" placeholder="Escriba codigo o nombre">
+              </label>
               <label>Producto a fabricar <select name="id_producto" id="orden-producto" required></select></label>
               <label>Cantidad objetivo <input name="cantidad_objetivo" type="number" step="0.001" required></label>
+              <label>Unidad
+                <select name="unidad_medida" id="orden-unidad" required></select>
+              </label>
               <label>Fecha <input name="fecha_programada" type="date" required></label>
               <label>Responsable <input name="responsable"></label>
             </div>
@@ -173,11 +194,17 @@
               <span id="output-preview" class="badge">ST</span>
             </div>
             <div class="form-grid process-grid">
+              <label>Buscar orden
+                <input id="tr-orden-search" placeholder="Escriba orden o producto">
+              </label>
               <label>Orden <select name="id_orden" id="tr-orden" required></select></label>
               <label>Fase <select name="id_fase" id="tr-fase" required></select></label>
               <label id="field-temperatura"><span id="label-temperatura">Temperatura (C)</span><input name="temperatura_masa" type="number" step="0.01"></label>
-              <label id="field-peso-total">Peso total (kg) <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
-              <label id="field-peso-porcion">Peso por porcion (kg) <input name="peso_por_porcion" type="number" step="0.001" min="0.001"></label>
+              <label id="field-peso-total"><span id="label-peso-total">Cantidad salida</span><input name="peso_total" type="number" step="0.001" min="0.001" required></label>
+              <label>Unidad salida
+                <select name="unidad_salida" id="tr-unidad" required></select>
+              </label>
+              <label id="field-peso-porcion"><span id="label-peso-porcion">Cantidad por porcion</span><input name="peso_por_porcion" type="number" step="0.001" min="0.001"></label>
             </div>
             <div id="timer-panel" class="timer-panel">
               <span>Tiempo de amasado</span>
@@ -262,9 +289,10 @@
           <option value="MP">MP</option>
           <option value="PROD">PROD</option>
         </select>
+        <input class="origin-search" placeholder="Filtrar lote">
         <select class="origin-lot"></select>
         <input class="origin-qty" type="number" step="0.001" min="0" placeholder="Cantidad">
-        <input class="origin-unit" value="kg" placeholder="Unidad">
+        <select class="origin-unit"></select>
         <button type="button" class="danger remove-origin">Quitar</button>
       </div>
     </template>

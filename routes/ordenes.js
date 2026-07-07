@@ -38,7 +38,15 @@ router.post('/', (req, res, next) => {
     data.id_receta = receta.id_receta;
     if (!data.fecha_programada) data.fecha_programada = new Date().toISOString().slice(0, 10);
     if (!data.codigo_orden) data.codigo_orden = nextOrderCode(data.fecha_programada);
-    if (!data.unidad_medida) data.unidad_medida = 'kg';
+    if (!data.unidad_medida) {
+      const product = db.prepare(`
+        SELECT ci.unidad_medida
+        FROM PRODUCTO p
+        LEFT JOIN CATALOGO_ITEM ci ON ci.id_item = p.id_item
+        WHERE p.id_producto = ?
+      `).get(data.id_producto);
+      data.unidad_medida = product?.unidad_medida || 'kg';
+    }
     const keys = Object.keys(data);
     const result = db.prepare(`INSERT INTO ORDEN_PRODUCCION (${keys.join(',')}) VALUES (${keys.map((key) => `@${key}`).join(',')})`).run(data);
     res.status(201).json(db.prepare('SELECT * FROM ORDEN_PRODUCCION WHERE id_orden = ?').get(result.lastInsertRowid));

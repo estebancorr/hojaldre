@@ -37,6 +37,7 @@ const endpoints = {
 
 let mixingInterval = null;
 let mixingStartedAt = null;
+const unitOptions = ['kg', 'g', 'L', 'ml', 'UND', 'Bandeja', 'Saco', 'Receta'];
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -78,6 +79,24 @@ function fillSelect(selector, rows, valueKey, labelFn, blank = true) {
     option.textContent = labelFn(row);
     el.appendChild(option);
   });
+}
+
+function fillUnitSelect(selectorOrElement, selected = 'kg') {
+  const el = typeof selectorOrElement === 'string' ? $(selectorOrElement) : selectorOrElement;
+  if (!el) return;
+  const current = selected || el.value || 'kg';
+  el.innerHTML = unitOptions.map((unit) => `<option value="${unit}">${unit}</option>`).join('');
+  el.value = unitOptions.includes(current) ? current : 'kg';
+}
+
+function optionText(value) {
+  return String(value || '').toLowerCase();
+}
+
+function filterRows(rows, query, labelFn) {
+  const term = optionText(query).trim();
+  if (!term) return rows;
+  return rows.filter((row) => optionText(labelFn(row)).includes(term));
 }
 
 function table(rows, columns, actions) {
@@ -168,15 +187,61 @@ function renderExplosionResult(data) {
 }
 
 function renderSelects() {
+  fillUnitSelect('#catalogo-unidad', 'kg');
+  fillUnitSelect('#materia-unidad', 'kg');
   fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.codigo_item || 'MP'} - ${r.nombre} (${r.unidad_medida})`);
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
-  fillSelect('#orden-producto', state.productos, 'id_producto', (r) => `${r.codigo_item || 'PT'} - ${r.nombre}`);
-  fillSelect('#tr-orden', state.ordenes, 'id_orden', (r) => r.codigo_orden, false);
+  renderProductSelect();
+  renderOrderSelect();
+  fillUnitSelect('#orden-unidad', selectedProductUnit());
+  fillUnitSelect('#tr-unidad', selectedOrderUnit());
   fillSelect('#tr-fase', state.fases.filter((r) => !['Recepcion materia prima', 'Generacion de lote para stock'].includes(r.nombre_fase)), 'id_fase', (r) => r.nombre_fase, false);
   updateOutputPreview();
   updatePhaseFields(false);
   fillSelect('#cc-lote', state.lotesProd, 'id_lote_prod', (r) => `${r.codigo_lote} - ${r.cantidad_actual} ${r.unidad_medida}`);
   document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
+}
+
+function productLabel(row) {
+  return `${row.codigo_item || 'PT'} - ${row.nombre}`;
+}
+
+function orderLabel(row) {
+  return `${row.codigo_orden} - ${row.producto || ''} (${row.cantidad_objetivo} ${row.unidad_medida || ''})`;
+}
+
+function renderProductSelect() {
+  const select = $('#orden-producto');
+  const current = select.value;
+  const rows = filterRows(state.productos, $('#orden-producto-search')?.value, productLabel);
+  fillSelect('#orden-producto', rows, 'id_producto', productLabel);
+  if (current && [...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function renderOrderSelect() {
+  const select = $('#tr-orden');
+  const current = select.value;
+  const rows = filterRows(state.ordenes, $('#tr-orden-search')?.value, orderLabel);
+  fillSelect('#tr-orden', rows, 'id_orden', orderLabel, false);
+  if (current && [...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function selectedProductUnit() {
+  const product = state.productos.find((row) => String(row.id_producto) === String($('#orden-producto')?.value));
+  return product?.unidad_medida || product?.unidad_item || 'kg';
+}
+
+function selectedOrderUnit() {
+  const order = state.ordenes.find((row) => String(row.id_orden) === String($('#tr-orden')?.value));
+  return order?.unidad_medida || 'kg';
+}
+
+function outputUnitForPhase() {
+  const phase = currentPhase();
+  const output = outputByPhase[phase?.nombre_fase] || [];
+  if (output[0] === 'PT') return selectedOrderUnit();
+  const type = state.tipos.find((row) => row.nombre === output[1] || row.categoria === output[1]);
+  return type?.unidad_medida || 'kg';
 }
 
 function renderStock() {
@@ -281,8 +346,8 @@ function renderRegistros() {
     { label: 'Tipo', render: (r) => r.tipo_lote === 'PRODUCTO_TERMINADO' ? 'PT' : 'ST' },
     { label: 'Fase', key: 'nombre_fase' },
     { label: 'Temperatura masa', render: (r) => r.temperatura_masa == null ? '' : `${r.temperatura_masa} C` },
-    { label: 'Peso total', render: (r) => `${r.peso_salida} kg` },
-    { label: 'Peso por porcion', render: (r) => r.peso_por_porcion == null ? '' : `${r.peso_por_porcion} kg` },
+    { label: 'Cantidad salida', render: (r) => `${r.peso_salida} ${r.unidad_medida || ''}` },
+    { label: 'Cantidad por porcion', render: (r) => r.peso_por_porcion == null ? '' : `${r.peso_por_porcion} ${r.unidad_medida || ''}` },
     { label: 'Tiempo', render: (r) => r.duracion_amasado_seg == null ? '-' : formatDuration(r.duracion_amasado_seg) }
   ]);
 }
@@ -303,6 +368,7 @@ function updateOriginLotSelect(row) {
   const current = select.value;
   const context = row.dataset.context || 'order';
   const selectedOrder = Number($('#tr-orden').value);
+  const filter = row.querySelector('.origin-search')?.value || '';
   const lots = type === 'MP'
     ? state.lotesMp.filter((l) => Number(l.peso_disponible) > 0)
     : state.lotesProd.filter((l) => {
@@ -310,20 +376,26 @@ function updateOriginLotSelect(row) {
       if (context === 'stock') return l.codigo_orden === 'STOCK-GENERAL';
       return l.codigo_orden === 'STOCK-GENERAL' || !selectedOrder || l.id_orden === selectedOrder;
     });
-  select.innerHTML = lots.map((lot) => {
+  const rows = filterRows(lots, filter, (lot) => type === 'MP'
+    ? `${lot.codigo_item || 'MP'} ${lot.lote_proveedor} ${lot.materia_prima} ${lot.proveedor} ${lot.peso_disponible} ${lot.unidad_medida || ''}`
+    : `${lot.codigo_lote} ${lot.tipo_preparacion || lot.tipo_lote} ${lot.cantidad_actual} ${lot.unidad_medida || ''}`);
+  select.innerHTML = rows.map((lot) => {
     const value = type === 'MP' ? lot.id_lote_mp : lot.id_lote_prod;
     const label = type === 'MP'
-      ? `${lot.codigo_item || 'MP'} - ${lot.lote_proveedor} - ${lot.materia_prima} - ${lot.proveedor} (${lot.peso_disponible})`
-      : `${lot.codigo_lote} - ${lot.tipo_preparacion || lot.tipo_lote} (${lot.cantidad_actual})`;
+      ? `${lot.codigo_item || 'MP'} - ${lot.lote_proveedor} - ${lot.materia_prima} - ${lot.proveedor} (${lot.peso_disponible} ${lot.unidad_medida || ''})`
+      : `${lot.codigo_lote} - ${lot.tipo_preparacion || lot.tipo_lote} (${lot.cantidad_actual} ${lot.unidad_medida || ''})`;
     return `<option value="${value}">${label}</option>`;
   }).join('');
   if (current) select.value = current;
+  fillUnitSelect(row.querySelector('.origin-unit'), selectedOriginUnit(row));
+  calcWeights(context);
 }
 
 function addOriginRow(containerId = 'origenes', context = 'order') {
   const node = $('#origin-template').content.firstElementChild.cloneNode(true);
   node.dataset.context = context;
   $(`#${containerId}`).appendChild(node);
+  fillUnitSelect(node.querySelector('.origin-unit'), 'kg');
   updateOriginLotSelect(node);
   calcWeights(context);
 }
@@ -331,8 +403,16 @@ function addOriginRow(containerId = 'origenes', context = 'order') {
 function calcWeights(context = 'order') {
   const container = context === 'stock' ? $('#stock-origenes') : $('#origenes');
   const output = context === 'stock' ? $('#stock-origin-total') : $('#origin-total');
-  const total = [...container.querySelectorAll('.origin-qty')].reduce((sum, input) => sum + Number(input.value || 0), 0);
-  output.textContent = `Total seleccionado: ${total.toFixed(3)} kg`;
+  const totals = {};
+  [...container.querySelectorAll('.origin-row')].forEach((row) => {
+    const qty = normalizeNumberText(row.querySelector('.origin-qty')?.value || 0);
+    const unit = row.querySelector('.origin-unit')?.value || 'kg';
+    if (Number.isFinite(qty) && qty > 0) totals[unit] = (totals[unit] || 0) + qty;
+  });
+  const summary = Object.entries(totals)
+    .map(([unit, value]) => `${value.toFixed(3)} ${unit}`)
+    .join(' + ') || '0';
+  output.textContent = `Total seleccionado: ${summary}`;
 }
 
 function normalizeNumberText(value) {
@@ -347,6 +427,9 @@ function scaleOriginsToOutput(form) {
   const target = normalizeNumberText(form.querySelector('[name="peso_total"]')?.value);
   if (!Number.isFinite(target) || target <= 0) return false;
   const inputs = [...form.querySelectorAll('.origin-qty')];
+  const outputUnit = form.querySelector('[name="unidad_salida"]')?.value || 'kg';
+  const units = [...form.querySelectorAll('.origin-unit')].map((input) => input.value || 'kg');
+  if (!units.length || units.some((unit) => unit !== outputUnit)) return false;
   const total = inputs.reduce((sum, input) => sum + normalizeNumberText(input.value || 0), 0);
   if (!Number.isFinite(total) || total <= 0 || target <= total + 0.000001) return false;
 
@@ -357,6 +440,17 @@ function scaleOriginsToOutput(form) {
   });
   calcWeights(form.id === 'stock-form' ? 'stock' : 'order');
   return true;
+}
+
+function selectedOriginUnit(row) {
+  const type = row.querySelector('.origin-type').value;
+  const selected = row.querySelector('.origin-lot').value;
+  if (type === 'MP') {
+    const lot = state.lotesMp.find((item) => String(item.id_lote_mp) === String(selected));
+    return lot?.unidad_medida || row.querySelector('.origin-unit')?.value || 'kg';
+  }
+  const lot = state.lotesProd.find((item) => String(item.id_lote_prod) === String(selected));
+  return lot?.unidad_medida || row.querySelector('.origin-unit')?.value || 'kg';
 }
 
 function originsPayload(form) {
@@ -416,6 +510,7 @@ function updateOutputPreview() {
   const output = outputByPhase[phase?.nombre_fase] || ['ST', 'Lote automatico'];
   $('#output-preview').textContent = `${output[0]} | ${output[1]}`;
   $('#output-preview').classList.toggle('final', output[0] === 'PT');
+  fillUnitSelect('#tr-unidad', outputUnitForPhase());
 }
 
 function updatePhaseFields(resetClock = true) {
@@ -676,7 +771,10 @@ document.addEventListener('click', (event) => {
     $('#transformacion-form').reset();
     $('#origenes').innerHTML = '';
     addOriginRow();
+    $('#tr-orden-search').value = '';
+    renderOrderSelect();
     $('#tr-orden').value = orderButton.dataset.orderProduction;
+    fillUnitSelect('#tr-unidad', outputUnitForPhase());
     updatePhaseFields();
     document.querySelector('[data-panel="orden-amasado"]').click();
   }
@@ -705,18 +803,32 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('input', (event) => {
   if (event.target.classList.contains('origin-qty')) calcWeights(event.target.closest('.origin-row').dataset.context || 'order');
+  if (event.target.classList.contains('origin-search')) updateOriginLotSelect(event.target.closest('.origin-row'));
+  if (event.target.id === 'orden-producto-search') {
+    renderProductSelect();
+    fillUnitSelect('#orden-unidad', selectedProductUnit());
+  }
+  if (event.target.id === 'tr-orden-search') {
+    renderOrderSelect();
+    fillUnitSelect('#tr-unidad', outputUnitForPhase());
+    document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
+  }
 });
 
 document.addEventListener('change', (event) => {
-  if (event.target.classList.contains('origin-type')) updateOriginLotSelect(event.target.closest('.origin-row'));
+  if (event.target.classList.contains('origin-type') || event.target.classList.contains('origin-lot')) updateOriginLotSelect(event.target.closest('.origin-row'));
+  if (event.target.classList.contains('origin-unit')) calcWeights(event.target.closest('.origin-row').dataset.context || 'order');
+  if (event.target.id === 'orden-producto') fillUnitSelect('#orden-unidad', selectedProductUnit());
   if (event.target.id === 'tr-fase') {
     updateOutputPreview();
     updatePhaseFields();
   }
   if (event.target.id === 'tr-orden') {
     resetMixingTimer();
+    fillUnitSelect('#tr-unidad', outputUnitForPhase());
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
+  if (event.target.id === 'tr-unidad') calcWeights();
 });
 
 $('#refresh').addEventListener('click', loadAll);
