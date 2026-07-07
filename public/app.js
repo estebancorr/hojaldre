@@ -84,8 +84,8 @@ function table(rows, columns, actions) {
   if (!rows.length) return '<p class="muted">Sin registros.</p>';
   const head = columns.map((col) => `<th>${col.label}</th>`).join('') + (actions ? '<th>Acciones</th>' : '');
   const body = rows.map((row) => {
-    const cells = columns.map((col) => `<td>${col.render ? col.render(row) : row[col.key] ?? ''}</td>`).join('');
-    return `<tr>${cells}${actions ? `<td>${actions(row)}</td>` : ''}</tr>`;
+    const cells = columns.map((col) => `<td data-label="${col.label}">${col.render ? col.render(row) : row[col.key] ?? ''}</td>`).join('');
+    return `<tr>${cells}${actions ? `<td data-label="Acciones">${actions(row)}</td>` : ''}</tr>`;
   }).join('');
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }

@@ -16,6 +16,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -26,6 +27,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   display: grid;
   grid-template-columns: 250px 1fr;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -75,6 +77,7 @@ nav {
 }
 
 main {
+  width: 100%;
   min-width: 0;
   padding: 24px;
 }
@@ -115,6 +118,7 @@ h3 {
 }
 
 .view {
+  min-width: 0;
   display: none;
 }
 
@@ -140,6 +144,7 @@ h3 {
 
 .card,
 .panel {
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -180,6 +185,7 @@ input,
 select,
 textarea {
   width: 100%;
+  min-width: 0;
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -317,6 +323,8 @@ form > button {
 }
 
 .table-wrap {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -354,6 +362,7 @@ th {
   grid-template-columns: 90px 1fr 130px 90px 90px;
   gap: 8px;
   margin-bottom: 8px;
+  min-width: 0;
 }
 
 .trace-panel {
@@ -557,18 +566,17 @@ th {
 
   nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
-    overflow-x: auto;
     padding-bottom: 2px;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
   }
 
   .nav {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     width: auto;
     padding: 10px 12px;
     white-space: nowrap;
+    text-align: center;
   }
 
   main {
@@ -614,12 +622,11 @@ th {
   }
 
   .tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
   }
 
   .tab {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     white-space: nowrap;
   }
 
@@ -731,13 +738,58 @@ th {
     width: 100%;
   }
 
-  table {
-    min-width: 620px;
+  .table-wrap {
+    overflow-x: visible;
   }
 
+  table,
+  thead,
+  tbody,
+  tr,
   th,
   td {
-    padding: 8px 7px;
+    display: block;
+    width: 100%;
+  }
+
+  table {
+    min-width: 0;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tr {
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  td {
+    display: grid;
+    grid-template-columns: minmax(104px, 38%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    border-bottom: 1px solid #edf1f5;
+    padding: 9px 10px;
+    overflow-wrap: anywhere;
+  }
+
+  td::before {
+    content: attr(data-label);
+    color: #50606d;
+    font-weight: 700;
+  }
+
+  td:last-child {
+    border-bottom: 0;
+  }
+
+  td button {
+    width: 100%;
   }
 
   .trace-panel {
@@ -796,7 +848,12 @@ th {
   }
 
   table {
-    min-width: 560px;
+    min-width: 0;
+  }
+
+  td {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .trace-branch,
