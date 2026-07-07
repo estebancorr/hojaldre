@@ -8,6 +8,7 @@
     "start": "node server.js",
     "seed": "node db/seed.js",
     "clean:operational": "node db/cleanOperationalData.js",
+    "import:paper": "node db/importPaperInventory.js",
     "sync:neon": "node db/syncNeon.js"
   },
   "dependencies": {
