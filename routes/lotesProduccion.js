@@ -5,13 +5,14 @@ const router = express.Router();
 
 const lotesSql = `
   SELECT l.*, o.codigo_orden, p.nombre AS producto, tp.nombre AS tipo_preparacion,
-         r.nombre_receta, f.nombre_fase
+         r.nombre_receta, f.nombre_fase, u.nombre AS ubicacion, u.tipo AS tipo_ubicacion
   FROM LOTE_PRODUCCION l
   JOIN ORDEN_PRODUCCION o ON o.id_orden = l.id_orden
   LEFT JOIN PRODUCTO p ON p.id_producto = l.id_producto
   LEFT JOIN TIPO_PREPARACION tp ON tp.id_tipo_preparacion = l.id_tipo_preparacion
   LEFT JOIN RECETA r ON r.id_receta = l.id_receta
   LEFT JOIN FASE_PRODUCCION f ON f.id_fase = l.id_fase_actual
+  LEFT JOIN UBICACION u ON u.id_ubicacion = l.id_ubicacion
 `;
 
 router.get('/', (req, res) => {

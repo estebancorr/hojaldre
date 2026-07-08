@@ -1,6 +1,7 @@
 const state = {
   view: 'dashboard',
   catalogoItems: [],
+  ubicaciones: [],
   proveedores: [],
   materias: [],
   lotesMp: [],
@@ -19,6 +20,7 @@ const state = {
 
 const endpoints = {
   catalogoItems: '/api/catalogo-items',
+  ubicaciones: '/api/ubicaciones',
   proveedores: '/api/proveedores',
   materias: '/api/materias-primas',
   lotesMp: '/api/lotes-materia-prima',
@@ -87,6 +89,19 @@ function fillUnitSelect(selectorOrElement, selected = 'kg') {
   const current = selected || el.value || 'kg';
   el.innerHTML = unitOptions.map((unit) => `<option value="${unit}">${unit}</option>`).join('');
   el.value = unitOptions.includes(current) ? current : 'kg';
+}
+
+function fillLocationSelect(selector, selected = '') {
+  const el = $(selector);
+  if (!el) return;
+  el.innerHTML = '<option value="">Sin ubicacion</option>';
+  state.ubicaciones.forEach((row) => {
+    const option = document.createElement('option');
+    option.value = row.id_ubicacion;
+    option.textContent = `${row.nombre}${row.tipo ? ` (${row.tipo})` : ''}`;
+    el.appendChild(option);
+  });
+  if (selected) el.value = selected;
 }
 
 function optionText(value) {
@@ -195,6 +210,9 @@ function renderExplosionResult(data) {
 function renderSelects() {
   fillUnitSelect('#catalogo-unidad', 'kg');
   fillUnitSelect('#materia-unidad', 'kg');
+  fillLocationSelect('#lote-mp-ubicacion');
+  fillLocationSelect('#stock-ubicacion', defaultLocationForUnit($('#stock-unidad')?.value));
+  fillLocationSelect('#tr-ubicacion', defaultLocationForUnit($('#tr-unidad')?.value));
   fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.codigo_item || 'MP'} - ${r.nombre} (${r.unidad_medida})`);
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
   renderProductSelect();
@@ -260,6 +278,13 @@ function selectedOrderUnit() {
 function selectedStockPreparationUnit() {
   const preparation = state.tipos.find((row) => String(row.id_tipo_preparacion) === String($('#stock-prep')?.value));
   return preparation?.unidad_medida || 'kg';
+}
+
+function defaultLocationForUnit(unit) {
+  const normalized = String(unit || '').toLowerCase();
+  const wanted = normalized === 'und' ? 'Congelador' : normalized === 'kg' ? 'Nevera' : '';
+  const location = state.ubicaciones.find((row) => row.nombre === wanted);
+  return location?.id_ubicacion || '';
 }
 
 function findProductFromCombo() {
@@ -328,6 +353,7 @@ function syncStockPreparationCombo(requireSelection = true) {
   $('#stock-prep').value = preparation?.id_tipo_preparacion || '';
   $('#stock-prep-combo').setCustomValidity(!requireSelection || preparation ? '' : 'Seleccione un semiterminado de la lista.');
   fillUnitSelect('#stock-unidad', selectedStockPreparationUnit());
+  fillLocationSelect('#stock-ubicacion', defaultLocationForUnit($('#stock-unidad')?.value));
 }
 
 function outputUnitForPhase() {
@@ -346,6 +372,7 @@ function renderStock() {
     { label: 'Orden', key: 'codigo_orden' },
     { label: 'Fase', key: 'nombre_fase' },
     { label: 'Disponible', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` },
+    { label: 'Ubicacion', key: 'ubicacion' },
     { label: 'Creacion', render: (r) => formatDate(r.fecha_creacion) },
     { label: 'Estado', key: 'estado' }
   ], (row) => `<button data-stock-trace="${row.codigo_lote}" class="secondary">Trazabilidad</button>`);
@@ -397,6 +424,7 @@ function renderMaterias() {
     { label: 'Materia', key: 'materia_prima' },
     { label: 'Proveedor', key: 'proveedor' },
     { label: 'Peso recibido', render: (r) => `${r.peso_recibido} ${r.unidad_medida || ''}` },
+    { label: 'Ubicacion', key: 'ubicacion' },
     { label: 'Fecha recepcion', render: (r) => formatDate(r.fecha_recepcion) },
     { label: 'Vence', render: (r) => formatDate(r.fecha_vencimiento) },
     { label: 'Estado', key: 'estado' }
@@ -421,7 +449,8 @@ function renderLotes() {
     { label: 'Preparacion', key: 'tipo_preparacion' },
     { label: 'Orden', key: 'codigo_orden' },
     { label: 'Fase', key: 'nombre_fase' },
-    { label: 'Cantidad', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` }
+    { label: 'Cantidad', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` },
+    { label: 'Ubicacion', key: 'ubicacion' }
   ], (row) => `<button data-lote="${row.id_lote_prod}" class="secondary">Ver</button>`);
 }
 
@@ -555,7 +584,8 @@ function originsPayload(form) {
       id_lote_mp_origen: tipo === 'MP' ? Number(row.querySelector('.origin-lot').value) : null,
       id_lote_prod_origen: tipo === 'PROD' ? Number(row.querySelector('.origin-lot').value) : null,
       cantidad_consumida: normalizeNumberText(row.querySelector('.origin-qty').value),
-      unidad_medida: row.querySelector('.origin-unit').value || 'kg'
+      unidad_medida: row.querySelector('.origin-unit').value || 'kg',
+      temperatura_uso: row.querySelector('.origin-temp')?.value ? normalizeNumberText(row.querySelector('.origin-temp').value) : null
     };
   });
 }
@@ -605,6 +635,7 @@ function updateOutputPreview() {
   $('#output-preview').textContent = `${output[0]} | ${output[1]}`;
   $('#output-preview').classList.toggle('final', output[0] === 'PT');
   fillUnitSelect('#tr-unidad', outputUnitForPhase());
+  fillLocationSelect('#tr-ubicacion', defaultLocationForUnit($('#tr-unidad')?.value));
 }
 
 function updatePhaseFields(resetClock = true) {
@@ -697,7 +728,7 @@ function traceNodeLabel(node) {
 function renderTraceNode(node) {
   const type = traceNodeType(node);
   const consumed = node.consumo
-    ? `<span>${node.consumo.cantidad_consumida} ${node.consumo.unidad_medida}</span>`
+    ? `<span>${node.consumo.cantidad_consumida} ${node.consumo.unidad_medida}${node.consumo.temperatura_uso == null ? '' : ` | ${node.consumo.temperatura_uso} C`}</span>`
     : '';
   const subtitle = node.tipo === 'MP'
     ? `${node.datos?.materia_prima || 'Materia prima'}`
@@ -738,6 +769,7 @@ async function showLot(id) {
     <p>Receta: ${lote.nombre_receta || ''}</p>
     <p>Fase: ${lote.nombre_fase || ''}</p>
     <p>Cantidad: ${lote.cantidad_actual} ${lote.unidad_medida}</p>
+    <p>Ubicacion: ${lote.ubicacion || 'Sin ubicacion'}</p>
     <p>Estado: ${lote.estado}</p>
     <p>Creacion: ${formatDate(lote.fecha_creacion)}</p>
     <p>${lote.observaciones || ''}</p>
@@ -920,7 +952,11 @@ document.addEventListener('change', (event) => {
   }
   if (event.target.id === 'stock-prep-combo') syncStockPreparationCombo();
   if (event.target.id === 'tr-unidad') calcWeights();
-  if (event.target.id === 'stock-unidad') calcWeights('stock');
+  if (event.target.id === 'tr-unidad') fillLocationSelect('#tr-ubicacion', defaultLocationForUnit($('#tr-unidad')?.value));
+  if (event.target.id === 'stock-unidad') {
+    calcWeights('stock');
+    fillLocationSelect('#stock-ubicacion', defaultLocationForUnit($('#stock-unidad')?.value));
+  }
 });
 
 $('#refresh').addEventListener('click', loadAll);

@@ -10,6 +10,14 @@ CREATE TABLE IF NOT EXISTS PROVEEDOR (
   estado TEXT NOT NULL DEFAULT 'ACTIVO'
 );
 
+CREATE TABLE IF NOT EXISTS UBICACION (
+  id_ubicacion INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre TEXT NOT NULL UNIQUE,
+  tipo TEXT NOT NULL DEFAULT 'GENERAL',
+  descripcion TEXT,
+  activa INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS CATALOGO_ITEM (
   id_item INTEGER PRIMARY KEY AUTOINCREMENT,
   codigo TEXT NOT NULL UNIQUE,
@@ -42,10 +50,12 @@ CREATE TABLE IF NOT EXISTS LOTE_MATERIA_PRIMA (
   peso_recibido REAL NOT NULL,
   peso_disponible REAL NOT NULL,
   temperatura_recepcion REAL,
+  id_ubicacion INTEGER,
   estado TEXT NOT NULL DEFAULT 'DISPONIBLE',
   observaciones TEXT,
   FOREIGN KEY (id_materia_prima) REFERENCES MATERIA_PRIMA(id_materia_prima),
-  FOREIGN KEY (id_proveedor) REFERENCES PROVEEDOR(id_proveedor)
+  FOREIGN KEY (id_proveedor) REFERENCES PROVEEDOR(id_proveedor),
+  FOREIGN KEY (id_ubicacion) REFERENCES UBICACION(id_ubicacion)
 );
 
 CREATE TABLE IF NOT EXISTS PRODUCTO (
@@ -148,13 +158,15 @@ CREATE TABLE IF NOT EXISTS LOTE_PRODUCCION (
   fecha_creacion TEXT NOT NULL,
   cantidad_actual REAL NOT NULL,
   unidad_medida TEXT NOT NULL,
+  id_ubicacion INTEGER,
   estado TEXT NOT NULL DEFAULT 'DISPONIBLE',
   observaciones TEXT,
   FOREIGN KEY (id_orden) REFERENCES ORDEN_PRODUCCION(id_orden),
   FOREIGN KEY (id_producto) REFERENCES PRODUCTO(id_producto),
   FOREIGN KEY (id_tipo_preparacion) REFERENCES TIPO_PREPARACION(id_tipo_preparacion),
   FOREIGN KEY (id_receta) REFERENCES RECETA(id_receta),
-  FOREIGN KEY (id_fase_actual) REFERENCES FASE_PRODUCCION(id_fase)
+  FOREIGN KEY (id_fase_actual) REFERENCES FASE_PRODUCCION(id_fase),
+  FOREIGN KEY (id_ubicacion) REFERENCES UBICACION(id_ubicacion)
 );
 
 CREATE TABLE IF NOT EXISTS OPERARIO (
@@ -210,6 +222,7 @@ CREATE TABLE IF NOT EXISTS CONSUMO_LOTE (
   id_lote_prod_destino INTEGER NOT NULL,
   cantidad_consumida REAL NOT NULL,
   unidad_medida TEXT NOT NULL,
+  temperatura_uso REAL,
   fecha_consumo TEXT NOT NULL,
   FOREIGN KEY (id_registro_fase) REFERENCES REGISTRO_FASE(id_registro_fase),
   FOREIGN KEY (id_lote_mp_origen) REFERENCES LOTE_MATERIA_PRIMA(id_lote_mp),

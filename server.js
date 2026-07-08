@@ -18,6 +18,7 @@ app.use(async (req, res, next) => {
 });
 
 app.use('/api/proveedores', require('./routes/proveedores'));
+app.use('/api/ubicaciones', require('./routes/ubicaciones'));
 app.use('/api/catalogo-items', require('./routes/catalogoItems'));
 app.use('/api/materias-primas', require('./routes/materiasPrimas'));
 app.use('/api/lotes-materia-prima', require('./routes/lotesMateriaPrima'));

@@ -143,8 +143,8 @@ const crearTransformacion = db.transaction((data) => {
 
   const loteResult = db.prepare(`
     INSERT INTO LOTE_PRODUCCION
-    (id_orden, id_producto, id_tipo_preparacion, id_receta, id_fase_actual, codigo_lote, tipo_lote, fecha_creacion, cantidad_actual, unidad_medida, estado, observaciones)
-    VALUES (@id_orden, @id_producto, @id_tipo_preparacion, @id_receta, @id_fase_actual, @codigo_lote, @tipo_lote, @fecha_creacion, @cantidad_actual, @unidad_medida, @estado, @observaciones)
+    (id_orden, id_producto, id_tipo_preparacion, id_receta, id_fase_actual, codigo_lote, tipo_lote, fecha_creacion, cantidad_actual, unidad_medida, id_ubicacion, estado, observaciones)
+    VALUES (@id_orden, @id_producto, @id_tipo_preparacion, @id_receta, @id_fase_actual, @codigo_lote, @tipo_lote, @fecha_creacion, @cantidad_actual, @unidad_medida, @id_ubicacion, @estado, @observaciones)
   `).run({
     id_orden: data.id_orden,
     id_producto: output.id_producto,
@@ -156,6 +156,7 @@ const crearTransformacion = db.transaction((data) => {
     fecha_creacion: fecha,
     cantidad_actual: pesoSalida,
     unidad_medida: unidadSalida,
+    id_ubicacion: data.id_ubicacion || null,
     estado: 'DISPONIBLE',
     observaciones: data.observaciones || ''
   });
@@ -206,8 +207,8 @@ const crearTransformacion = db.transaction((data) => {
 
     db.prepare(`
       INSERT INTO CONSUMO_LOTE
-      (id_registro_fase, tipo_lote_origen, id_lote_mp_origen, id_lote_prod_origen, id_lote_prod_destino, cantidad_consumida, unidad_medida, fecha_consumo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id_registro_fase, tipo_lote_origen, id_lote_mp_origen, id_lote_prod_origen, id_lote_prod_destino, cantidad_consumida, unidad_medida, temperatura_uso, fecha_consumo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       regResult.lastInsertRowid,
       consumo.tipo_lote_origen,
@@ -216,6 +217,7 @@ const crearTransformacion = db.transaction((data) => {
       idLoteDestino,
       cantidad,
       unit(consumo.unidad_medida),
+      consumo.temperatura_uso == null || consumo.temperatura_uso === '' ? null : num(consumo.temperatura_uso),
       fecha
     );
   });

@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS PROVEEDOR (
   estado TEXT NOT NULL DEFAULT 'ACTIVO'
 );
 
+CREATE TABLE IF NOT EXISTS UBICACION (
+  id_ubicacion BIGSERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL UNIQUE,
+  tipo TEXT NOT NULL DEFAULT 'GENERAL',
+  descripcion TEXT,
+  activa INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS CATALOGO_ITEM (
   id_item BIGSERIAL PRIMARY KEY,
   codigo TEXT NOT NULL UNIQUE,
@@ -39,6 +47,7 @@ CREATE TABLE IF NOT EXISTS LOTE_MATERIA_PRIMA (
   peso_recibido DOUBLE PRECISION NOT NULL,
   peso_disponible DOUBLE PRECISION NOT NULL,
   temperatura_recepcion DOUBLE PRECISION,
+  id_ubicacion BIGINT REFERENCES UBICACION(id_ubicacion),
   estado TEXT NOT NULL DEFAULT 'DISPONIBLE',
   observaciones TEXT
 );
@@ -130,6 +139,7 @@ CREATE TABLE IF NOT EXISTS LOTE_PRODUCCION (
   fecha_creacion TEXT NOT NULL,
   cantidad_actual DOUBLE PRECISION NOT NULL,
   unidad_medida TEXT NOT NULL,
+  id_ubicacion BIGINT REFERENCES UBICACION(id_ubicacion),
   estado TEXT NOT NULL DEFAULT 'DISPONIBLE',
   observaciones TEXT
 );
@@ -182,6 +192,7 @@ CREATE TABLE IF NOT EXISTS CONSUMO_LOTE (
   id_lote_prod_destino BIGINT NOT NULL REFERENCES LOTE_PRODUCCION(id_lote_prod),
   cantidad_consumida DOUBLE PRECISION NOT NULL,
   unidad_medida TEXT NOT NULL,
+  temperatura_uso DOUBLE PRECISION,
   fecha_consumo TEXT NOT NULL
 );
 
@@ -205,3 +216,7 @@ CREATE INDEX IF NOT EXISTS idx_detalle_receta_item ON DETALLE_RECETA(id_item);
 CREATE INDEX IF NOT EXISTS idx_consumo_destino ON CONSUMO_LOTE(id_lote_prod_destino);
 CREATE INDEX IF NOT EXISTS idx_consumo_mp_origen ON CONSUMO_LOTE(id_lote_mp_origen);
 CREATE INDEX IF NOT EXISTS idx_consumo_prod_origen ON CONSUMO_LOTE(id_lote_prod_origen);
+
+ALTER TABLE lote_materia_prima ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);
+ALTER TABLE lote_produccion ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);
+ALTER TABLE consumo_lote ADD COLUMN IF NOT EXISTS temperatura_uso DOUBLE PRECISION;

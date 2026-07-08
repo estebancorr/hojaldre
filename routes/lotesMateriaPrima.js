@@ -4,11 +4,13 @@ const db = require('../db/database');
 const router = express.Router();
 
 const listSql = `
-  SELECT l.*, mp.nombre AS materia_prima, mp.unidad_medida, ci.codigo AS codigo_item, p.nombre AS proveedor
+  SELECT l.*, mp.nombre AS materia_prima, mp.unidad_medida, ci.codigo AS codigo_item, p.nombre AS proveedor,
+         u.nombre AS ubicacion, u.tipo AS tipo_ubicacion
   FROM LOTE_MATERIA_PRIMA l
   JOIN MATERIA_PRIMA mp ON mp.id_materia_prima = l.id_materia_prima
   LEFT JOIN CATALOGO_ITEM ci ON ci.id_item = mp.id_item
   JOIN PROVEEDOR p ON p.id_proveedor = l.id_proveedor
+  LEFT JOIN UBICACION u ON u.id_ubicacion = l.id_ubicacion
   ORDER BY l.id_lote_mp DESC
 `;
 
@@ -33,9 +35,9 @@ router.post('/', (req, res, next) => {
 
     const result = db.prepare(`
       INSERT INTO LOTE_MATERIA_PRIMA
-      (id_materia_prima, id_proveedor, lote_proveedor, lote_interno, fecha_recepcion, fecha_vencimiento, peso_recibido, peso_disponible, estado, observaciones)
+      (id_materia_prima, id_proveedor, lote_proveedor, lote_interno, fecha_recepcion, fecha_vencimiento, peso_recibido, peso_disponible, id_ubicacion, estado, observaciones)
       VALUES
-      (@id_materia_prima, @id_proveedor, @lote_proveedor, @lote_interno, @fecha_recepcion, @fecha_vencimiento, @peso_recibido, @peso_disponible, 'DISPONIBLE', @observaciones)
+      (@id_materia_prima, @id_proveedor, @lote_proveedor, @lote_interno, @fecha_recepcion, @fecha_vencimiento, @peso_recibido, @peso_disponible, @id_ubicacion, 'DISPONIBLE', @observaciones)
     `).run({
       id_materia_prima: Number(data.id_materia_prima),
       id_proveedor: Number(data.id_proveedor),
@@ -45,6 +47,7 @@ router.post('/', (req, res, next) => {
       fecha_vencimiento: data.fecha_vencimiento || null,
       peso_recibido: pesoRecibido,
       peso_disponible: pesoRecibido,
+      id_ubicacion: data.id_ubicacion || null,
       observaciones: data.observaciones || null
     });
 

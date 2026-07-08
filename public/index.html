@@ -109,9 +109,10 @@
               <label>Proveedor <select name="id_proveedor" id="lote-mp-proveedor" required></select></label>
               <label>Lote proveedor <input name="lote_proveedor" required></label>
               <label>Fecha recepcion <input name="fecha_recepcion" type="date" required></label>
-              <label>Fecha vencimiento <input name="fecha_vencimiento" type="date"></label>
-              <label>Peso recibido <input name="peso_recibido" type="number" step="0.001" required></label>
-            </div>
+            <label>Fecha vencimiento <input name="fecha_vencimiento" type="date"></label>
+            <label>Peso recibido <input name="peso_recibido" type="number" step="0.001" required></label>
+            <label>Ubicacion <select name="id_ubicacion" id="lote-mp-ubicacion"></select></label>
+          </div>
             <label>Observaciones <textarea name="observaciones"></textarea></label>
             <button>Guardar lote</button>
           </form>
@@ -147,6 +148,7 @@
             <label>Unidad salida
               <select name="unidad_salida" id="stock-unidad" required></select>
             </label>
+            <label>Ubicacion destino <select name="id_ubicacion" id="stock-ubicacion"></select></label>
           </div>
           <label>Observaciones <textarea name="observaciones" placeholder="Ej: Mantequilla empastada para stock semanal"></textarea></label>
           <div class="origins-head">
@@ -231,6 +233,7 @@
               <label>Unidad salida
                 <select name="unidad_salida" id="tr-unidad" required></select>
               </label>
+              <label>Ubicacion destino <select name="id_ubicacion" id="tr-ubicacion"></select></label>
               <label id="field-peso-porcion"><span id="label-peso-porcion">Cantidad por porcion</span><input name="peso_por_porcion" type="number" step="0.001" min="0.001"></label>
             </div>
             <div id="timer-panel" class="timer-panel">
@@ -320,6 +323,7 @@
         <select class="origin-lot"></select>
         <input class="origin-qty" type="number" step="0.001" min="0" placeholder="Cantidad">
         <select class="origin-unit"></select>
+        <input class="origin-temp" type="number" step="0.1" placeholder="Temp uso C">
         <button type="button" class="danger remove-origin">Quitar</button>
       </div>
     </template>

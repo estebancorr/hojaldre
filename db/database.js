@@ -17,6 +17,7 @@ const disablePersist = Boolean(process.env.VERCEL || process.env.DISABLE_SQLITE_
 
 const hydrateTables = [
   'PROVEEDOR',
+  'UBICACION',
   'CATALOGO_ITEM',
   'MATERIA_PRIMA',
   'PRODUCTO',
@@ -66,8 +67,12 @@ async function hydrateFromNeon() {
     [...hydrateTables].reverse().forEach((table) => sqlDb.run(`DELETE FROM ${table}`));
 
     for (const table of hydrateTables) {
-      const result = await client.query(`SELECT * FROM ${table.toLowerCase()} ORDER BY 1 ASC`);
-      result.rows.forEach((row) => insertSqliteRow(table, row));
+      try {
+        const result = await client.query(`SELECT * FROM ${table.toLowerCase()} ORDER BY 1 ASC`);
+        result.rows.forEach((row) => insertSqliteRow(table, row));
+      } catch (error) {
+        if (error.code !== '42P01') throw error;
+      }
     }
     sqlDb.run('PRAGMA foreign_keys = ON');
   } finally {
@@ -87,6 +92,12 @@ function ensureRegistroFaseColumns() {
   additions.forEach(([name, type]) => {
     if (!columns.has(name)) sqlDb.run(`ALTER TABLE REGISTRO_FASE ADD COLUMN ${name} ${type}`);
   });
+}
+
+function ensureLocationColumns() {
+  ensureColumn('LOTE_MATERIA_PRIMA', 'id_ubicacion', 'INTEGER');
+  ensureColumn('LOTE_PRODUCCION', 'id_ubicacion', 'INTEGER');
+  ensureColumn('CONSUMO_LOTE', 'temperatura_uso', 'REAL');
 }
 
 function tableColumns(table) {
@@ -467,6 +478,18 @@ function rawGet(sql, params = []) {
 
 function ensureSystemData() {
   ensureReady();
+  [
+    ['Almacen seco', 'SECO', 'Materia prima o empaque a temperatura ambiente'],
+    ['Nevera', 'REFRIGERADO', 'Preparaciones o materia prima refrigerada'],
+    ['Congelador', 'CONGELADO', 'Producto o semiterminado congelado'],
+    ['Produccion', 'PROCESO', 'Lote en proceso de produccion']
+  ].forEach(([nombre, tipo, descripcion]) => {
+    sqlDb.run(`
+      INSERT INTO UBICACION (nombre, tipo, descripcion, activa)
+      SELECT ?, ?, ?, 1
+      WHERE NOT EXISTS (SELECT 1 FROM UBICACION WHERE nombre = ?)
+    `, [nombre, tipo, descripcion, nombre]);
+  });
   sqlDb.run(`
     INSERT INTO PRODUCTO (nombre, descripcion, categoria, peso_objetivo_unidad, estado)
     SELECT 'Stock general de preparaciones', 'Producto interno para lotes sin orden comercial', 'INTERNO', NULL, 'ACTIVO'
@@ -565,7 +588,9 @@ const api = {
     sqlDb.run('PRAGMA foreign_keys = ON');
     sqlDb.run(fs.readFileSync(schemaPath, 'utf8'));
     ensureRegistroFaseColumns();
+    ensureLocationColumns();
     await hydrateFromNeon();
+    ensureLocationColumns();
     ensureCatalogColumns();
     ensureSystemData();
     ensureCatalogColumns();

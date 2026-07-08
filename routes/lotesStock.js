@@ -61,8 +61,8 @@ const createStockLot = db.transaction((data) => {
   const fecha = today();
   const loteResult = db.prepare(`
     INSERT INTO LOTE_PRODUCCION
-    (id_orden, id_producto, id_tipo_preparacion, id_receta, id_fase_actual, codigo_lote, tipo_lote, fecha_creacion, cantidad_actual, unidad_medida, estado, observaciones)
-    VALUES (?, ?, ?, NULL, ?, ?, 'SEMIELABORADO', ?, ?, ?, 'DISPONIBLE', ?)
+    (id_orden, id_producto, id_tipo_preparacion, id_receta, id_fase_actual, codigo_lote, tipo_lote, fecha_creacion, cantidad_actual, unidad_medida, id_ubicacion, estado, observaciones)
+    VALUES (?, ?, ?, NULL, ?, ?, 'SEMIELABORADO', ?, ?, ?, ?, 'DISPONIBLE', ?)
   `).run(
     stockOrder.id_orden,
     stockOrder.id_producto,
@@ -72,6 +72,7 @@ const createStockLot = db.transaction((data) => {
     fecha,
     pesoSalida,
     unidadSalida,
+    data.id_ubicacion || null,
     data.observaciones || 'Preparacion para stock general'
   );
 
@@ -115,8 +116,8 @@ const createStockLot = db.transaction((data) => {
 
     db.prepare(`
       INSERT INTO CONSUMO_LOTE
-      (id_registro_fase, tipo_lote_origen, id_lote_mp_origen, id_lote_prod_origen, id_lote_prod_destino, cantidad_consumida, unidad_medida, fecha_consumo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (id_registro_fase, tipo_lote_origen, id_lote_mp_origen, id_lote_prod_origen, id_lote_prod_destino, cantidad_consumida, unidad_medida, temperatura_uso, fecha_consumo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       registerResult.lastInsertRowid,
       consumo.tipo_lote_origen,
@@ -125,6 +126,7 @@ const createStockLot = db.transaction((data) => {
       loteResult.lastInsertRowid,
       cantidad,
       unit(consumo.unidad_medida),
+      consumo.temperatura_uso == null || consumo.temperatura_uso === '' ? null : num(consumo.temperatura_uso),
       fecha
     );
   });

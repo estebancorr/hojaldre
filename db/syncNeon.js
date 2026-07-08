@@ -21,6 +21,7 @@ const schemaPath = path.join(__dirname, 'schema.postgres.sql');
 
 const tables = [
   'PROVEEDOR',
+  'UBICACION',
   'CATALOGO_ITEM',
   'MATERIA_PRIMA',
   'PRODUCTO',
@@ -41,6 +42,7 @@ const tables = [
 
 const sequenceColumns = {
   PROVEEDOR: 'id_proveedor',
+  UBICACION: 'id_ubicacion',
   CATALOGO_ITEM: 'id_item',
   MATERIA_PRIMA: 'id_materia_prima',
   PRODUCTO: 'id_producto',

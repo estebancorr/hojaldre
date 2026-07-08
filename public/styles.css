@@ -396,7 +396,7 @@ th {
 
 .origin-row {
   display: grid;
-  grid-template-columns: 76px minmax(120px, 0.7fr) minmax(220px, 1.3fr) 120px 100px 90px;
+  grid-template-columns: 76px minmax(110px, 0.6fr) minmax(210px, 1.2fr) 105px 90px 110px 90px;
   gap: 8px;
   margin-bottom: 8px;
   min-width: 0;
@@ -570,7 +570,7 @@ th {
   }
 
   .origin-row {
-    grid-template-columns: 74px minmax(110px, 0.7fr) minmax(180px, 1.3fr) 100px 86px 84px;
+    grid-template-columns: 70px minmax(100px, 0.6fr) minmax(170px, 1.2fr) 92px 80px 100px 82px;
   }
 }
 
