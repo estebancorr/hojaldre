@@ -402,6 +402,23 @@ th {
   min-width: 0;
 }
 
+.move-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.move-form h3,
+.move-form button,
+.move-form label:last-of-type {
+  grid-column: 1 / -1;
+}
+
 .trace-panel {
   position: relative;
   overflow: hidden;
@@ -774,6 +791,10 @@ th {
   .origins-head button,
   form > button {
     width: 100%;
+  }
+
+  .move-form {
+    grid-template-columns: 1fr;
   }
 
   .table-wrap {

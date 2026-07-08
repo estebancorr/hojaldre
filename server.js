@@ -29,6 +29,7 @@ app.use('/api/explosion-materiales', require('./routes/explosionMateriales'));
 app.use('/api/ordenes', require('./routes/ordenes'));
 app.use('/api/fases', require('./routes/fases'));
 app.use('/api/lotes-produccion', require('./routes/lotesProduccion'));
+app.use('/api/movimientos-ubicacion', require('./routes/movimientosUbicacion'));
 app.use('/api/transformaciones', require('./routes/transformaciones'));
 app.use('/api/lotes-stock', require('./routes/lotesStock'));
 app.use('/api/trazabilidad', require('./routes/trazabilidad'));

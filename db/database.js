@@ -33,6 +33,7 @@ const hydrateTables = [
   'EQUIPO',
   'REGISTRO_FASE',
   'CONSUMO_LOTE',
+  'MOVIMIENTO_UBICACION',
   'CONTROL_CALIDAD'
 ];
 

@@ -773,7 +773,25 @@ async function showLot(id) {
     <p>Estado: ${lote.estado}</p>
     <p>Creacion: ${formatDate(lote.fecha_creacion)}</p>
     <p>${lote.observaciones || ''}</p>
+    <form id="move-lot-form" class="move-form">
+      <h3>Mover ubicacion</h3>
+      <input type="hidden" name="id_lote_prod" value="${lote.id_lote_prod}">
+      <label>Nueva ubicacion <select name="id_ubicacion_destino" id="move-location" required></select></label>
+      <label>Temperatura traslado (C) <input name="temperatura" type="number" step="0.1"></label>
+      <label>Responsable <input name="responsable"></label>
+      <label>Observaciones <textarea name="observaciones"></textarea></label>
+      <button>Mover lote</button>
+    </form>
     <button class="secondary" id="trace-this">Ver trazabilidad hacia atras</button>
+    <h3>Movimientos de ubicacion</h3>
+    ${table(lote.movimientos || [], [
+      { label: 'Fecha', render: (r) => formatDate(r.fecha) },
+      { label: 'Hora', key: 'hora' },
+      { label: 'Origen', render: (r) => r.ubicacion_origen || 'Sin ubicacion' },
+      { label: 'Destino', key: 'ubicacion_destino' },
+      { label: 'Temp', render: (r) => r.temperatura == null ? '' : `${r.temperatura} C` },
+      { label: 'Responsable', key: 'responsable' }
+    ])}
     <h3>Usado en</h3>
     ${table(lote.usado_en || [], [
       { label: 'Destino', key: 'lote_destino' },
@@ -781,10 +799,27 @@ async function showLot(id) {
       { label: 'Fecha', render: (r) => formatDate(r.fecha_consumo) }
     ])}
   `;
+  fillLocationSelect('#move-location', lote.id_ubicacion || '');
   $('#trace-this').addEventListener('click', () => {
     $('#trace-code').value = lote.codigo_lote;
     setView('trazabilidad');
     $('#trace-form').requestSubmit();
+  });
+  $('#move-lot-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      const data = formData(form);
+      await api(`/api/movimientos-ubicacion/produccion/${lote.id_lote_prod}`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      await loadAll();
+      await showLot(lote.id_lote_prod);
+      setStatus('Ubicacion del lote actualizada');
+    } catch (error) {
+      setStatus(error.message, true);
+    }
   });
 }
 

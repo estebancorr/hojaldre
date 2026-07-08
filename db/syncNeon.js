@@ -37,6 +37,7 @@ const tables = [
   'EQUIPO',
   'REGISTRO_FASE',
   'CONSUMO_LOTE',
+  'MOVIMIENTO_UBICACION',
   'CONTROL_CALIDAD'
 ];
 
@@ -58,6 +59,7 @@ const sequenceColumns = {
   EQUIPO: 'id_equipo',
   REGISTRO_FASE: 'id_registro_fase',
   CONSUMO_LOTE: 'id_consumo',
+  MOVIMIENTO_UBICACION: 'id_movimiento',
   CONTROL_CALIDAD: 'id_control'
 };
 

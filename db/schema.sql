@@ -230,6 +230,24 @@ CREATE TABLE IF NOT EXISTS CONSUMO_LOTE (
   FOREIGN KEY (id_lote_prod_destino) REFERENCES LOTE_PRODUCCION(id_lote_prod)
 );
 
+CREATE TABLE IF NOT EXISTS MOVIMIENTO_UBICACION (
+  id_movimiento INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo_lote TEXT NOT NULL CHECK (tipo_lote IN ('MP','PROD')),
+  id_lote_mp INTEGER,
+  id_lote_prod INTEGER,
+  id_ubicacion_origen INTEGER,
+  id_ubicacion_destino INTEGER NOT NULL,
+  fecha TEXT NOT NULL,
+  hora TEXT,
+  temperatura REAL,
+  responsable TEXT,
+  observaciones TEXT,
+  FOREIGN KEY (id_lote_mp) REFERENCES LOTE_MATERIA_PRIMA(id_lote_mp),
+  FOREIGN KEY (id_lote_prod) REFERENCES LOTE_PRODUCCION(id_lote_prod),
+  FOREIGN KEY (id_ubicacion_origen) REFERENCES UBICACION(id_ubicacion),
+  FOREIGN KEY (id_ubicacion_destino) REFERENCES UBICACION(id_ubicacion)
+);
+
 CREATE TABLE IF NOT EXISTS CONTROL_CALIDAD (
   id_control INTEGER PRIMARY KEY AUTOINCREMENT,
   id_registro_fase INTEGER NOT NULL,
@@ -251,3 +269,5 @@ CREATE INDEX IF NOT EXISTS idx_explosion_materiales_item ON EXPLOSION_MATERIALES
 CREATE INDEX IF NOT EXISTS idx_consumo_destino ON CONSUMO_LOTE(id_lote_prod_destino);
 CREATE INDEX IF NOT EXISTS idx_consumo_mp_origen ON CONSUMO_LOTE(id_lote_mp_origen);
 CREATE INDEX IF NOT EXISTS idx_consumo_prod_origen ON CONSUMO_LOTE(id_lote_prod_origen);
+CREATE INDEX IF NOT EXISTS idx_movimiento_prod ON MOVIMIENTO_UBICACION(id_lote_prod);
+CREATE INDEX IF NOT EXISTS idx_movimiento_mp ON MOVIMIENTO_UBICACION(id_lote_mp);

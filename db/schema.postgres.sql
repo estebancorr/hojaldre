@@ -196,6 +196,20 @@ CREATE TABLE IF NOT EXISTS CONSUMO_LOTE (
   fecha_consumo TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS MOVIMIENTO_UBICACION (
+  id_movimiento BIGSERIAL PRIMARY KEY,
+  tipo_lote TEXT NOT NULL CHECK (tipo_lote IN ('MP','PROD')),
+  id_lote_mp BIGINT REFERENCES LOTE_MATERIA_PRIMA(id_lote_mp),
+  id_lote_prod BIGINT REFERENCES LOTE_PRODUCCION(id_lote_prod),
+  id_ubicacion_origen BIGINT REFERENCES UBICACION(id_ubicacion),
+  id_ubicacion_destino BIGINT NOT NULL REFERENCES UBICACION(id_ubicacion),
+  fecha TEXT NOT NULL,
+  hora TEXT,
+  temperatura DOUBLE PRECISION,
+  responsable TEXT,
+  observaciones TEXT
+);
+
 CREATE TABLE IF NOT EXISTS CONTROL_CALIDAD (
   id_control BIGSERIAL PRIMARY KEY,
   id_registro_fase BIGINT NOT NULL REFERENCES REGISTRO_FASE(id_registro_fase),
@@ -216,6 +230,8 @@ CREATE INDEX IF NOT EXISTS idx_detalle_receta_item ON DETALLE_RECETA(id_item);
 CREATE INDEX IF NOT EXISTS idx_consumo_destino ON CONSUMO_LOTE(id_lote_prod_destino);
 CREATE INDEX IF NOT EXISTS idx_consumo_mp_origen ON CONSUMO_LOTE(id_lote_mp_origen);
 CREATE INDEX IF NOT EXISTS idx_consumo_prod_origen ON CONSUMO_LOTE(id_lote_prod_origen);
+CREATE INDEX IF NOT EXISTS idx_movimiento_prod ON MOVIMIENTO_UBICACION(id_lote_prod);
+CREATE INDEX IF NOT EXISTS idx_movimiento_mp ON MOVIMIENTO_UBICACION(id_lote_mp);
 
 ALTER TABLE lote_materia_prima ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);
 ALTER TABLE lote_produccion ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);

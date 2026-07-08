@@ -35,7 +35,15 @@ router.get('/:id', (req, res) => {
     WHERE c.tipo_lote_origen = 'PROD' AND c.id_lote_prod_origen = ?
     ORDER BY c.id_consumo DESC
   `).all(req.params.id);
-  res.json({ ...lote, usado_en: usadoEn });
+  const movimientos = db.prepare(`
+    SELECT m.*, origen.nombre AS ubicacion_origen, destino.nombre AS ubicacion_destino
+    FROM MOVIMIENTO_UBICACION m
+    LEFT JOIN UBICACION origen ON origen.id_ubicacion = m.id_ubicacion_origen
+    JOIN UBICACION destino ON destino.id_ubicacion = m.id_ubicacion_destino
+    WHERE m.tipo_lote = 'PROD' AND m.id_lote_prod = ?
+    ORDER BY m.id_movimiento DESC
+  `).all(req.params.id);
+  res.json({ ...lote, usado_en: usadoEn, movimientos });
 });
 
 module.exports = router;
