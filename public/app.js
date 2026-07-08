@@ -199,8 +199,10 @@ function renderSelects() {
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
   renderProductSelect();
   renderOrderSelect();
+  renderStockPreparationSelect();
   fillUnitSelect('#orden-unidad', selectedProductUnit());
   fillUnitSelect('#tr-unidad', selectedOrderUnit());
+  fillUnitSelect('#stock-unidad', selectedStockPreparationUnit());
   fillSelect('#tr-fase', state.fases.filter((r) => !['Recepcion materia prima', 'Generacion de lote para stock'].includes(r.nombre_fase)), 'id_fase', (r) => r.nombre_fase, false);
   updateOutputPreview();
   updatePhaseFields(false);
@@ -216,6 +218,17 @@ function orderLabel(row) {
   return `${row.codigo_orden} - ${row.producto || ''} (${row.cantidad_objetivo} ${row.unidad_medida || ''})`;
 }
 
+function preparationLabel(row) {
+  return `${row.codigo_item || row.categoria || 'ST'} - ${row.nombre}`;
+}
+
+function stockPreparations() {
+  return state.tipos.filter((row) => {
+    const name = String(row.nombre || '').toLowerCase();
+    return row.estado !== 'INACTIVO' && name !== 'producto terminado' && name !== 'lote consolidado';
+  });
+}
+
 function renderProductSelect() {
   fillDatalist('#orden-producto-options', state.productos, productLabel);
   syncProductCombo(false);
@@ -226,6 +239,11 @@ function renderOrderSelect() {
   syncOrderCombo(false);
 }
 
+function renderStockPreparationSelect() {
+  fillDatalist('#stock-prep-options', stockPreparations(), preparationLabel);
+  syncStockPreparationCombo(false);
+}
+
 function selectedProductUnit() {
   const product = state.productos.find((row) => String(row.id_producto) === String($('#orden-producto')?.value));
   return product?.unidad_medida || product?.unidad_item || 'kg';
@@ -234,6 +252,11 @@ function selectedProductUnit() {
 function selectedOrderUnit() {
   const order = state.ordenes.find((row) => String(row.id_orden) === String($('#tr-orden')?.value));
   return order?.unidad_medida || 'kg';
+}
+
+function selectedStockPreparationUnit() {
+  const preparation = state.tipos.find((row) => String(row.id_tipo_preparacion) === String($('#stock-prep')?.value));
+  return preparation?.unidad_medida || 'kg';
 }
 
 function findProductFromCombo() {
@@ -248,6 +271,15 @@ function findProductFromCombo() {
 function findOrderFromCombo() {
   const value = optionText($('#tr-orden-combo')?.value);
   return state.ordenes.find((row) => optionText(orderLabel(row)) === value || optionText(row.codigo_orden) === value);
+}
+
+function findStockPreparationFromCombo() {
+  const value = optionText($('#stock-prep-combo')?.value);
+  return stockPreparations().find((row) => {
+    const code = optionText(row.codigo_item || row.categoria);
+    const name = optionText(row.nombre);
+    return optionText(preparationLabel(row)) === value || code === value || name === value;
+  });
 }
 
 function setProductCombo(id) {
@@ -266,6 +298,14 @@ function setOrderCombo(id) {
   fillUnitSelect('#tr-unidad', outputUnitForPhase());
 }
 
+function setStockPreparationCombo(id) {
+  const preparation = state.tipos.find((row) => String(row.id_tipo_preparacion) === String(id));
+  $('#stock-prep').value = preparation?.id_tipo_preparacion || '';
+  $('#stock-prep-combo').value = preparation ? preparationLabel(preparation) : '';
+  $('#stock-prep-combo').setCustomValidity(preparation ? '' : 'Seleccione un semiterminado de la lista.');
+  fillUnitSelect('#stock-unidad', selectedStockPreparationUnit());
+}
+
 function syncProductCombo(requireSelection = true) {
   const product = findProductFromCombo();
   $('#orden-producto').value = product?.id_producto || '';
@@ -278,6 +318,13 @@ function syncOrderCombo(requireSelection = true) {
   $('#tr-orden').value = order?.id_orden || '';
   $('#tr-orden-combo').setCustomValidity(!requireSelection || order ? '' : 'Seleccione una orden de la lista.');
   fillUnitSelect('#tr-unidad', outputUnitForPhase());
+}
+
+function syncStockPreparationCombo(requireSelection = true) {
+  const preparation = findStockPreparationFromCombo();
+  $('#stock-prep').value = preparation?.id_tipo_preparacion || '';
+  $('#stock-prep-combo').setCustomValidity(!requireSelection || preparation ? '' : 'Seleccione un semiterminado de la lista.');
+  fillUnitSelect('#stock-unidad', selectedStockPreparationUnit());
 }
 
 function outputUnitForPhase() {
@@ -851,6 +898,7 @@ document.addEventListener('input', (event) => {
     syncOrderCombo();
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
+  if (event.target.id === 'stock-prep-combo') syncStockPreparationCombo();
 });
 
 document.addEventListener('change', (event) => {
@@ -867,7 +915,9 @@ document.addEventListener('change', (event) => {
     fillUnitSelect('#tr-unidad', outputUnitForPhase());
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
+  if (event.target.id === 'stock-prep-combo') syncStockPreparationCombo();
   if (event.target.id === 'tr-unidad') calcWeights();
+  if (event.target.id === 'stock-unidad') calcWeights('stock');
 });
 
 $('#refresh').addEventListener('click', loadAll);

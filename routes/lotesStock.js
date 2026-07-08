@@ -18,6 +18,14 @@ function generateLotCode(prefix) {
   return `${base}-${String(sequence).padStart(3, '0')}`;
 }
 
+function num(value) {
+  return Number(String(value ?? '').replace(',', '.'));
+}
+
+function unit(value) {
+  return String(value || 'kg').trim();
+}
+
 const createStockLot = db.transaction((data) => {
   const stockOrder = db.prepare(`
     SELECT o.*, p.id_producto
@@ -30,19 +38,22 @@ const createStockLot = db.transaction((data) => {
 
   if (!stockOrder || !stockPhase) throw new Error('No se pudo inicializar el stock general. Reinicie el servidor.');
   if (!preparation || preparation.nombre === 'Producto terminado') throw new Error('Seleccione una preparacion intermedia valida.');
-  if (!data.peso_total || Number(data.peso_total) <= 0) throw new Error('El peso total debe ser mayor a cero.');
+  if (!data.peso_total || num(data.peso_total) <= 0) throw new Error('La cantidad de salida debe ser mayor a cero.');
   if (!Array.isArray(data.consumos) || data.consumos.length === 0) throw new Error('Agregue al menos un lote de origen.');
 
-  const pesoEntrada = data.consumos.reduce((sum, item) => sum + Number(item.cantidad_consumida || 0), 0);
-  const pesoSalida = Number(data.peso_total);
-  if (data.consumos.some((item) => Number(item.cantidad_consumida) <= 0)) throw new Error('Las cantidades consumidas deben ser mayores a cero.');
-  if (pesoSalida > pesoEntrada) throw new Error('El peso total no puede superar la cantidad consumida.');
+  const pesoEntrada = data.consumos.reduce((sum, item) => sum + num(item.cantidad_consumida || 0), 0);
+  const pesoSalida = num(data.peso_total);
+  const unidadSalida = unit(data.unidad_salida);
+  const unidadesEntrada = data.consumos.map((item) => unit(item.unidad_medida));
+  const unidadesComparables = unidadesEntrada.length > 0 && unidadesEntrada.every((entrada) => entrada === unidadSalida);
+  if (data.consumos.some((item) => num(item.cantidad_consumida) <= 0)) throw new Error('Las cantidades consumidas deben ser mayores a cero.');
+  if (unidadesComparables && pesoSalida > pesoEntrada) throw new Error('La cantidad de salida no puede superar la cantidad consumida.');
 
   const fecha = today();
   const loteResult = db.prepare(`
     INSERT INTO LOTE_PRODUCCION
     (id_orden, id_producto, id_tipo_preparacion, id_receta, id_fase_actual, codigo_lote, tipo_lote, fecha_creacion, cantidad_actual, unidad_medida, estado, observaciones)
-    VALUES (?, ?, ?, NULL, ?, ?, 'SEMIELABORADO', ?, ?, 'kg', 'DISPONIBLE', ?)
+    VALUES (?, ?, ?, NULL, ?, ?, 'SEMIELABORADO', ?, ?, ?, 'DISPONIBLE', ?)
   `).run(
     stockOrder.id_orden,
     stockOrder.id_producto,
@@ -51,10 +62,11 @@ const createStockLot = db.transaction((data) => {
     generateLotCode(preparation.categoria || 'STOCK'),
     fecha,
     pesoSalida,
+    unidadSalida,
     data.observaciones || 'Preparacion para stock general'
   );
 
-  const merma = Number((pesoEntrada - pesoSalida).toFixed(3));
+  const merma = unidadesComparables ? Number((pesoEntrada - pesoSalida).toFixed(3)) : 0;
   const registerResult = db.prepare(`
     INSERT INTO REGISTRO_FASE
     (id_orden, id_fase, id_lote_salida, fecha, peso_entrada_total, peso_salida, merma, estado, observaciones)
@@ -71,7 +83,7 @@ const createStockLot = db.transaction((data) => {
   );
 
   data.consumos.forEach((consumo) => {
-    const cantidad = Number(consumo.cantidad_consumida);
+    const cantidad = num(consumo.cantidad_consumida);
     if (consumo.tipo_lote_origen === 'MP') {
       const origin = db.prepare('SELECT * FROM LOTE_MATERIA_PRIMA WHERE id_lote_mp = ?').get(consumo.id_lote_mp_origen);
       if (!origin) throw new Error('Lote de materia prima no encontrado.');
@@ -103,7 +115,7 @@ const createStockLot = db.transaction((data) => {
       consumo.tipo_lote_origen === 'PROD' ? consumo.id_lote_prod_origen : null,
       loteResult.lastInsertRowid,
       cantidad,
-      consumo.unidad_medida || 'kg',
+      unit(consumo.unidad_medida),
       fecha
     );
   });
