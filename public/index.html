@@ -167,10 +167,11 @@
           <form id="orden-form" class="panel">
             <h2>Nueva orden</h2>
             <div class="form-grid">
-              <label>Buscar producto
-                <input id="orden-producto-search" placeholder="Escriba codigo o nombre">
+              <label>Producto a fabricar
+                <input id="orden-producto-combo" list="orden-producto-options" placeholder="Escriba codigo o nombre" autocomplete="off" required>
+                <input type="hidden" name="id_producto" id="orden-producto">
+                <datalist id="orden-producto-options"></datalist>
               </label>
-              <label>Producto a fabricar <select name="id_producto" id="orden-producto" required></select></label>
               <label>Cantidad objetivo <input name="cantidad_objetivo" type="number" step="0.001" required></label>
               <label>Unidad
                 <select name="unidad_medida" id="orden-unidad" required></select>
@@ -194,10 +195,11 @@
               <span id="output-preview" class="badge">ST</span>
             </div>
             <div class="form-grid process-grid">
-              <label>Buscar orden
-                <input id="tr-orden-search" placeholder="Escriba orden o producto">
+              <label>Orden
+                <input id="tr-orden-combo" list="tr-orden-options" placeholder="Escriba orden o producto" autocomplete="off" required>
+                <input type="hidden" name="id_orden" id="tr-orden">
+                <datalist id="tr-orden-options"></datalist>
               </label>
-              <label>Orden <select name="id_orden" id="tr-orden" required></select></label>
               <label>Fase <select name="id_fase" id="tr-fase" required></select></label>
               <label id="field-temperatura"><span id="label-temperatura">Temperatura (C)</span><input name="temperatura_masa" type="number" step="0.01"></label>
               <label id="field-peso-total"><span id="label-peso-total">Cantidad salida</span><input name="peso_total" type="number" step="0.001" min="0.001" required></label>

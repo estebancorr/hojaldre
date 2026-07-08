@@ -99,6 +99,12 @@ function filterRows(rows, query, labelFn) {
   return rows.filter((row) => optionText(labelFn(row)).includes(term));
 }
 
+function fillDatalist(selector, rows, labelFn) {
+  const el = $(selector);
+  if (!el) return;
+  el.innerHTML = rows.map((row) => `<option value="${labelFn(row)}"></option>`).join('');
+}
+
 function table(rows, columns, actions) {
   if (!rows.length) return '<p class="muted">Sin registros.</p>';
   const head = columns.map((col) => `<th>${col.label}</th>`).join('') + (actions ? '<th>Acciones</th>' : '');
@@ -181,7 +187,7 @@ function renderExplosionResult(data) {
       return;
     }
     setView('ordenes');
-    $('#orden-producto').value = product.id_producto;
+    setProductCombo(product.id_producto);
     setStatus(`Producto ${data.codigo} seleccionado para nueva orden`);
   });
 }
@@ -211,19 +217,13 @@ function orderLabel(row) {
 }
 
 function renderProductSelect() {
-  const select = $('#orden-producto');
-  const current = select.value;
-  const rows = filterRows(state.productos, $('#orden-producto-search')?.value, productLabel);
-  fillSelect('#orden-producto', rows, 'id_producto', productLabel);
-  if (current && [...select.options].some((option) => option.value === current)) select.value = current;
+  fillDatalist('#orden-producto-options', state.productos, productLabel);
+  syncProductCombo(false);
 }
 
 function renderOrderSelect() {
-  const select = $('#tr-orden');
-  const current = select.value;
-  const rows = filterRows(state.ordenes, $('#tr-orden-search')?.value, orderLabel);
-  fillSelect('#tr-orden', rows, 'id_orden', orderLabel, false);
-  if (current && [...select.options].some((option) => option.value === current)) select.value = current;
+  fillDatalist('#tr-orden-options', state.ordenes, orderLabel);
+  syncOrderCombo(false);
 }
 
 function selectedProductUnit() {
@@ -234,6 +234,50 @@ function selectedProductUnit() {
 function selectedOrderUnit() {
   const order = state.ordenes.find((row) => String(row.id_orden) === String($('#tr-orden')?.value));
   return order?.unidad_medida || 'kg';
+}
+
+function findProductFromCombo() {
+  const value = optionText($('#orden-producto-combo')?.value);
+  return state.productos.find((row) => {
+    const code = optionText(row.codigo_item);
+    const name = optionText(row.nombre);
+    return optionText(productLabel(row)) === value || code === value || name === value;
+  });
+}
+
+function findOrderFromCombo() {
+  const value = optionText($('#tr-orden-combo')?.value);
+  return state.ordenes.find((row) => optionText(orderLabel(row)) === value || optionText(row.codigo_orden) === value);
+}
+
+function setProductCombo(id) {
+  const product = state.productos.find((row) => String(row.id_producto) === String(id));
+  $('#orden-producto').value = product?.id_producto || '';
+  $('#orden-producto-combo').value = product ? productLabel(product) : '';
+  $('#orden-producto-combo').setCustomValidity(product ? '' : 'Seleccione un producto de la lista.');
+  fillUnitSelect('#orden-unidad', selectedProductUnit());
+}
+
+function setOrderCombo(id) {
+  const order = state.ordenes.find((row) => String(row.id_orden) === String(id));
+  $('#tr-orden').value = order?.id_orden || '';
+  $('#tr-orden-combo').value = order ? orderLabel(order) : '';
+  $('#tr-orden-combo').setCustomValidity(order ? '' : 'Seleccione una orden de la lista.');
+  fillUnitSelect('#tr-unidad', outputUnitForPhase());
+}
+
+function syncProductCombo(requireSelection = true) {
+  const product = findProductFromCombo();
+  $('#orden-producto').value = product?.id_producto || '';
+  $('#orden-producto-combo').setCustomValidity(!requireSelection || product ? '' : 'Seleccione un producto de la lista.');
+  fillUnitSelect('#orden-unidad', selectedProductUnit());
+}
+
+function syncOrderCombo(requireSelection = true) {
+  const order = findOrderFromCombo();
+  $('#tr-orden').value = order?.id_orden || '';
+  $('#tr-orden-combo').setCustomValidity(!requireSelection || order ? '' : 'Seleccione una orden de la lista.');
+  fillUnitSelect('#tr-unidad', outputUnitForPhase());
 }
 
 function outputUnitForPhase() {
@@ -771,10 +815,8 @@ document.addEventListener('click', (event) => {
     $('#transformacion-form').reset();
     $('#origenes').innerHTML = '';
     addOriginRow();
-    $('#tr-orden-search').value = '';
     renderOrderSelect();
-    $('#tr-orden').value = orderButton.dataset.orderProduction;
-    fillUnitSelect('#tr-unidad', outputUnitForPhase());
+    setOrderCombo(orderButton.dataset.orderProduction);
     updatePhaseFields();
     document.querySelector('[data-panel="orden-amasado"]').click();
   }
@@ -804,13 +846,9 @@ document.addEventListener('click', (event) => {
 document.addEventListener('input', (event) => {
   if (event.target.classList.contains('origin-qty')) calcWeights(event.target.closest('.origin-row').dataset.context || 'order');
   if (event.target.classList.contains('origin-search')) updateOriginLotSelect(event.target.closest('.origin-row'));
-  if (event.target.id === 'orden-producto-search') {
-    renderProductSelect();
-    fillUnitSelect('#orden-unidad', selectedProductUnit());
-  }
-  if (event.target.id === 'tr-orden-search') {
-    renderOrderSelect();
-    fillUnitSelect('#tr-unidad', outputUnitForPhase());
+  if (event.target.id === 'orden-producto-combo') syncProductCombo();
+  if (event.target.id === 'tr-orden-combo') {
+    syncOrderCombo();
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
 });
@@ -818,12 +856,13 @@ document.addEventListener('input', (event) => {
 document.addEventListener('change', (event) => {
   if (event.target.classList.contains('origin-type') || event.target.classList.contains('origin-lot')) updateOriginLotSelect(event.target.closest('.origin-row'));
   if (event.target.classList.contains('origin-unit')) calcWeights(event.target.closest('.origin-row').dataset.context || 'order');
-  if (event.target.id === 'orden-producto') fillUnitSelect('#orden-unidad', selectedProductUnit());
+  if (event.target.id === 'orden-producto-combo') syncProductCombo();
   if (event.target.id === 'tr-fase') {
     updateOutputPreview();
     updatePhaseFields();
   }
-  if (event.target.id === 'tr-orden') {
+  if (event.target.id === 'tr-orden-combo') {
+    syncOrderCombo();
     resetMixingTimer();
     fillUnitSelect('#tr-unidad', outputUnitForPhase());
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
