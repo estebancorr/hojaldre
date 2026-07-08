@@ -225,7 +225,10 @@ function preparationLabel(row) {
 function stockPreparations() {
   return state.tipos.filter((row) => {
     const name = String(row.nombre || '').toLowerCase();
-    return row.estado !== 'INACTIVO' && name !== 'producto terminado' && name !== 'lote consolidado';
+    const code = String(row.codigo_item || row.categoria || '').toUpperCase();
+    const isRecipeStage = code.startsWith('STPC') || (name.includes('congelado') && name.includes('1 und'));
+    const isInternalOnly = ['producto terminado', 'lote consolidado', 'croissant formado', 'croissant congelado'].includes(name);
+    return row.estado !== 'INACTIVO' && !isInternalOnly && !isRecipeStage;
   });
 }
 

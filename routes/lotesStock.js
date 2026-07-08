@@ -34,10 +34,19 @@ const createStockLot = db.transaction((data) => {
     WHERE o.codigo_orden = 'STOCK-GENERAL'
   `).get();
   const stockPhase = db.prepare("SELECT id_fase FROM FASE_PRODUCCION WHERE nombre_fase = 'Generacion de lote para stock'").get();
-  const preparation = db.prepare('SELECT * FROM TIPO_PREPARACION WHERE id_tipo_preparacion = ?').get(data.id_tipo_preparacion);
+  const preparation = db.prepare(`
+    SELECT tp.*, ci.codigo AS codigo_item, ci.unidad_medida AS unidad_item
+    FROM TIPO_PREPARACION tp
+    LEFT JOIN CATALOGO_ITEM ci ON ci.id_item = tp.id_item
+    WHERE tp.id_tipo_preparacion = ?
+  `).get(data.id_tipo_preparacion);
 
   if (!stockOrder || !stockPhase) throw new Error('No se pudo inicializar el stock general. Reinicie el servidor.');
   if (!preparation || preparation.nombre === 'Producto terminado') throw new Error('Seleccione una preparacion intermedia valida.');
+  const prepCode = String(preparation.codigo_item || preparation.categoria || '').toUpperCase();
+  const prepName = String(preparation.nombre || '').toLowerCase();
+  const isRecipeStage = prepCode.startsWith('STPC') || (prepName.includes('congelado') && prepName.includes('1 und'));
+  if (isRecipeStage) throw new Error('Ese semiterminado pertenece a una receta/orden y no debe crearse como stock base.');
   if (!data.peso_total || num(data.peso_total) <= 0) throw new Error('La cantidad de salida debe ser mayor a cero.');
   if (!Array.isArray(data.consumos) || data.consumos.length === 0) throw new Error('Agregue al menos un lote de origen.');
 
