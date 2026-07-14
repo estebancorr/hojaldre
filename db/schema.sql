@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS REGISTRO_FASE (
   peso_entrada_total REAL NOT NULL,
   peso_salida REAL NOT NULL,
   peso_por_porcion REAL,
+  cantidad_laminados INTEGER,
   duracion_amasado_seg INTEGER,
   merma REAL NOT NULL,
   estado TEXT NOT NULL DEFAULT 'COMPLETADA',

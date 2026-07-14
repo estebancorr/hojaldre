@@ -64,7 +64,7 @@ function formData(form) {
   Object.keys(data).forEach((key) => {
     if (data[key] === '') data[key] = null;
     if (key.startsWith('id_') && data[key] !== null) data[key] = Number(data[key]);
-    if (['peso_recibido', 'temperatura_objetivo', 'cantidad_objetivo', 'temperatura_masa', 'peso_total', 'peso_por_porcion', 'duracion_amasado_seg'].includes(key) && data[key] !== null) {
+    if (['peso_recibido', 'temperatura_objetivo', 'cantidad_objetivo', 'temperatura_masa', 'peso_total', 'peso_por_porcion', 'duracion_amasado_seg', 'cantidad_laminados'].includes(key) && data[key] !== null) {
       data[key] = normalizeNumberText(data[key]);
     }
   });
@@ -125,7 +125,7 @@ function table(rows, columns, actions) {
   const head = columns.map((col) => `<th>${col.label}</th>`).join('') + (actions ? '<th>Acciones</th>' : '');
   const body = rows.map((row) => {
     const cells = columns.map((col) => `<td data-label="${col.label}">${col.render ? col.render(row) : row[col.key] ?? ''}</td>`).join('');
-    return `<tr>${cells}${actions ? `<td data-label="Acciones">${actions(row)}</td>` : ''}</tr>`;
+    return `<tr>${cells}${actions ? `<td data-label="Acciones"><div class="row-actions">${actions(row)}</div></td>` : ''}</tr>`;
   }).join('');
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -160,6 +160,7 @@ function render() {
   renderProveedores();
   renderMaterias();
   renderStock();
+  renderUbicaciones();
   renderOrdenes();
   renderLotes();
   renderRegistros();
@@ -213,11 +214,13 @@ function renderSelects() {
   fillLocationSelect('#lote-mp-ubicacion');
   fillLocationSelect('#stock-ubicacion', defaultLocationForUnit($('#stock-unidad')?.value));
   fillLocationSelect('#tr-ubicacion', defaultLocationForUnit($('#tr-unidad')?.value));
+  fillLocationSelect('#move-destination');
   fillSelect('#lote-mp-materia', state.materias, 'id_materia_prima', (r) => `${r.codigo_item || 'MP'} - ${r.nombre} (${r.unidad_medida})`);
   fillSelect('#lote-mp-proveedor', state.proveedores, 'id_proveedor', (r) => r.nombre);
   renderProductSelect();
   renderOrderSelect();
   renderStockPreparationSelect();
+  renderMoveLotSelect();
   fillUnitSelect('#orden-unidad', selectedProductUnit());
   fillUnitSelect('#tr-unidad', selectedOrderUnit());
   fillUnitSelect('#stock-unidad', selectedStockPreparationUnit());
@@ -238,6 +241,10 @@ function orderLabel(row) {
 
 function preparationLabel(row) {
   return `${row.codigo_item || row.categoria || 'ST'} - ${row.nombre}`;
+}
+
+function lotLabel(row) {
+  return `${row.codigo_lote} - ${row.tipo_preparacion || row.producto || row.tipo_lote} (${row.cantidad_actual} ${row.unidad_medida})`;
 }
 
 function stockPreparations() {
@@ -263,6 +270,11 @@ function renderOrderSelect() {
 function renderStockPreparationSelect() {
   fillDatalist('#stock-prep-options', stockPreparations(), preparationLabel);
   syncStockPreparationCombo(false);
+}
+
+function renderMoveLotSelect() {
+  fillDatalist('#move-lot-options', movableLots(), lotLabel);
+  syncMoveLotCombo(false);
 }
 
 function selectedProductUnit() {
@@ -308,6 +320,15 @@ function findStockPreparationFromCombo() {
     const name = optionText(row.nombre);
     return optionText(preparationLabel(row)) === value || code === value || name === value;
   });
+}
+
+function movableLots() {
+  return state.lotesProd.filter((row) => Number(row.cantidad_actual) > 0);
+}
+
+function findMoveLotFromCombo() {
+  const value = optionText($('#move-lot-combo')?.value);
+  return movableLots().find((row) => optionText(lotLabel(row)) === value || optionText(row.codigo_lote) === value);
 }
 
 function setProductCombo(id) {
@@ -356,6 +377,21 @@ function syncStockPreparationCombo(requireSelection = true) {
   fillLocationSelect('#stock-ubicacion', defaultLocationForUnit($('#stock-unidad')?.value));
 }
 
+function syncMoveLotCombo(requireSelection = true) {
+  const lot = findMoveLotFromCombo();
+  $('#move-lot-id').value = lot?.id_lote_prod || '';
+  $('#move-lot-combo').setCustomValidity(!requireSelection || lot ? '' : 'Seleccione un lote de la lista.');
+  $('#move-current-location').value = lot?.ubicacion || 'Sin ubicacion';
+}
+
+function setMoveLotCombo(id) {
+  const lot = state.lotesProd.find((row) => String(row.id_lote_prod) === String(id));
+  $('#move-lot-id').value = lot?.id_lote_prod || '';
+  $('#move-lot-combo').value = lot ? lotLabel(lot) : '';
+  $('#move-current-location').value = lot?.ubicacion || 'Sin ubicacion';
+  $('#move-lot-combo').setCustomValidity(lot ? '' : 'Seleccione un lote de la lista.');
+}
+
 function outputUnitForPhase() {
   const phase = currentPhase();
   const output = outputByPhase[phase?.nombre_fase] || [];
@@ -375,7 +411,22 @@ function renderStock() {
     { label: 'Ubicacion', key: 'ubicacion' },
     { label: 'Creacion', render: (r) => formatDate(r.fecha_creacion) },
     { label: 'Estado', key: 'estado' }
-  ], (row) => `<button data-stock-trace="${row.codigo_lote}" class="secondary">Trazabilidad</button>`);
+  ], (row) => `
+    <button data-stock-lote="${row.id_lote_prod}" class="secondary">Ver / mover</button>
+    <button data-stock-trace="${row.codigo_lote}" class="secondary">Trazabilidad</button>
+  `);
+}
+
+function renderUbicaciones() {
+  const rows = movableLots();
+  $('#tabla-ubicaciones-lotes').innerHTML = table(rows, [
+    { label: 'Lote', key: 'codigo_lote' },
+    { label: 'Tipo', render: (r) => r.tipo_lote === 'PRODUCTO_TERMINADO' ? 'PT' : 'ST' },
+    { label: 'Preparacion/producto', render: (r) => r.tipo_preparacion || r.producto || '' },
+    { label: 'Disponible', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` },
+    { label: 'Ubicacion', render: (r) => r.ubicacion || 'Sin ubicacion' },
+    { label: 'Estado', key: 'estado' }
+  ], (row) => `<button data-location-lote="${row.id_lote_prod}" class="secondary">Mover</button>`);
 }
 
 function renderProveedores() {
@@ -390,6 +441,32 @@ function renderProveedores() {
 
 function renderDashboard() {
   $('#dashboard').innerHTML = `
+    <div class="action-board">
+      <button class="action-card" data-action-view="materias" data-action-tab="mp-materias">
+        <span>Recibir MP</span>
+        <strong>Registrar lote</strong>
+      </button>
+      <button class="action-card" data-action-view="preparaciones">
+        <span>Stock ST</span>
+        <strong>Crear base</strong>
+      </button>
+      <button class="action-card" data-action-view="ordenes" data-action-tab="orden-listado">
+        <span>Produccion</span>
+        <strong>Nueva orden</strong>
+      </button>
+      <button class="action-card" data-action-view="ordenes" data-action-tab="orden-amasado">
+        <span>Fase</span>
+        <strong>Registrar</strong>
+      </button>
+      <button class="action-card" data-action-view="ubicaciones">
+        <span>Ubicacion</span>
+        <strong>Mover lote</strong>
+      </button>
+      <button class="action-card" data-action-view="trazabilidad">
+        <span>Lote</span>
+        <strong>Trazabilidad</strong>
+      </button>
+    </div>
     <div class="cards">
       <div class="card">Catalogo<strong>${state.catalogoItems.length}</strong></div>
       <div class="card">Materias primas<strong>${state.lotesMp.length}</strong></div>
@@ -404,6 +481,7 @@ function renderDashboard() {
         { label: 'Preparacion', key: 'tipo_preparacion' },
         { label: 'Fase', key: 'nombre_fase' },
         { label: 'Cantidad', render: (r) => `${r.cantidad_actual} ${r.unidad_medida}` },
+        { label: 'Ubicacion', key: 'ubicacion' },
         { label: 'Estado', key: 'estado' }
       ])}
     </div>`;
@@ -471,6 +549,7 @@ function renderRegistros() {
     { label: 'Temperatura masa', render: (r) => r.temperatura_masa == null ? '' : `${r.temperatura_masa} C` },
     { label: 'Cantidad salida', render: (r) => `${r.peso_salida} ${r.unidad_medida || ''}` },
     { label: 'Cantidad por porcion', render: (r) => r.peso_por_porcion == null ? '' : `${r.peso_por_porcion} ${r.unidad_medida || ''}` },
+    { label: 'Veces laminado', render: (r) => r.cantidad_laminados == null ? '' : r.cantidad_laminados },
     { label: 'Tiempo', render: (r) => r.duracion_amasado_seg == null ? '-' : formatDuration(r.duracion_amasado_seg) }
   ]);
 }
@@ -547,6 +626,7 @@ function trimNumber(value) {
 }
 
 function scaleOriginsToOutput(form) {
+  if (currentPhaseFields().laminations) return false;
   const target = normalizeNumberText(form.querySelector('[name="peso_total"]')?.value);
   if (!Number.isFinite(target) || target <= 0) return false;
   const inputs = [...form.querySelectorAll('.origin-qty')];
@@ -612,7 +692,7 @@ const fieldsByPhase = {
   'Preparacion mantequilla empastada': { temperature: true, temperatureLabel: 'Temperatura de mantequilla (C)' },
   'Preparacion de masa': { temperature: true, portion: true, timer: true, temperatureLabel: 'Temperatura de masa (C)' },
   'Empaste': { temperature: true, temperatureLabel: 'Temperatura de empaste (C)' },
-  'Laminado': { temperature: true, temperatureLabel: 'Temperatura de masa (C)' },
+  'Laminado': { temperature: true, laminations: true, temperatureLabel: 'Temperatura de masa (C)' },
   'Reposo': { temperature: true, temperatureLabel: 'Temperatura de masa (C)' },
   'Formado': { portion: true },
   'Congelado': { temperature: true, temperatureLabel: 'Temperatura de congelado (C)' },
@@ -642,17 +722,29 @@ function updatePhaseFields(resetClock = true) {
   const fields = currentPhaseFields();
   const temperatureField = $('#field-temperatura');
   const portionField = $('#field-peso-porcion');
+  const totalField = $('#field-peso-total');
+  const unitField = $('#tr-unidad').closest('label');
+  const laminationsField = $('#field-laminados');
   const temperatureInput = temperatureField.querySelector('input');
   const portionInput = portionField.querySelector('input');
+  const totalInput = totalField.querySelector('input');
+  const laminationsInput = laminationsField.querySelector('input');
 
   temperatureField.classList.toggle('is-hidden', !fields.temperature);
   portionField.classList.toggle('is-hidden', !fields.portion);
+  totalField.classList.toggle('is-hidden', Boolean(fields.laminations));
+  unitField.classList.toggle('is-hidden', Boolean(fields.laminations));
+  laminationsField.classList.toggle('is-hidden', !fields.laminations);
   $('#timer-panel').classList.toggle('is-hidden', !fields.timer);
   $('#label-temperatura').textContent = fields.temperatureLabel || 'Temperatura (C)';
   temperatureInput.required = Boolean(fields.temperature);
   portionInput.required = Boolean(fields.portion);
+  totalInput.required = !fields.laminations;
+  laminationsInput.required = Boolean(fields.laminations);
   if (!fields.temperature) temperatureInput.value = '';
   if (!fields.portion) portionInput.value = '';
+  if (fields.laminations) totalInput.value = '';
+  if (!fields.laminations) laminationsInput.value = '';
   if (resetClock) resetMixingTimer();
   $('#save-mixing').disabled = Boolean(fields.timer && !$('#mixing-end').value);
 }
@@ -759,9 +851,11 @@ function renderTraceNode(node) {
     </div>`;
 }
 
-async function showLot(id) {
+async function showLot(id, targetSelector = '#detalle-lote') {
   const lote = await api(`/api/lotes-produccion/${id}`);
-  $('#detalle-lote').innerHTML = `
+  const target = $(targetSelector);
+  target.classList.remove('muted');
+  target.innerHTML = `
     <p><strong>${lote.codigo_lote}</strong></p>
     <p>Tipo: ${lote.tipo_lote}</p>
     <p>Preparacion: ${lote.tipo_preparacion || ''}</p>
@@ -815,7 +909,7 @@ async function showLot(id) {
         body: JSON.stringify(data)
       });
       await loadAll();
-      await showLot(lote.id_lote_prod);
+      await showLot(lote.id_lote_prod, targetSelector);
       setStatus('Ubicacion del lote actualizada');
     } catch (error) {
       setStatus(error.message, true);
@@ -828,6 +922,17 @@ function setView(name) {
   document.querySelectorAll('.view').forEach((view) => view.classList.toggle('active', view.id === name));
   document.querySelectorAll('.nav').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
   $('#page-title').textContent = document.querySelector(`.nav[data-view="${name}"]`).textContent;
+}
+
+function goToAction(button) {
+  const view = button.dataset.actionView;
+  const panel = button.dataset.actionTab;
+  if (!view) return;
+  setView(view);
+  if (panel) {
+    const tab = document.querySelector(`.tab[data-panel="${panel}"]`);
+    if (tab) activatePanel(tab);
+  }
 }
 
 function bindForms() {
@@ -892,6 +997,26 @@ function bindForms() {
     });
   }
 
+  $('#move-location-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      syncMoveLotCombo();
+      const data = formData(form);
+      if (!data.id_lote_prod) throw new Error('Seleccione un lote de la lista.');
+      await api(`/api/movimientos-ubicacion/produccion/${data.id_lote_prod}`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      form.reset();
+      $('#move-current-location').value = 'Seleccione un lote';
+      await loadAll();
+      setStatus('Movimiento registrado automaticamente con fecha y hora');
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
   $('#trace-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
@@ -921,6 +1046,9 @@ function bindForms() {
 }
 
 document.addEventListener('click', (event) => {
+  const action = event.target.closest('.action-card');
+  if (action) goToAction(action);
+
   const nav = event.target.closest('.nav');
   if (nav) setView(nav.dataset.view);
 
@@ -943,6 +1071,15 @@ document.addEventListener('click', (event) => {
     $('#trace-code').value = stockTrace.dataset.stockTrace;
     setView('trazabilidad');
     $('#trace-form').requestSubmit();
+  }
+
+  const stockLoteButton = event.target.closest('[data-stock-lote]');
+  if (stockLoteButton) showLot(stockLoteButton.dataset.stockLote, '#detalle-stock-lote').catch((error) => setStatus(error.message, true));
+
+  const locationLoteButton = event.target.closest('[data-location-lote]');
+  if (locationLoteButton) {
+    setMoveLotCombo(locationLoteButton.dataset.locationLote);
+    setStatus('Lote seleccionado para movimiento');
   }
 
   const loteButton = event.target.closest('[data-lote]');
@@ -969,6 +1106,7 @@ document.addEventListener('input', (event) => {
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
   if (event.target.id === 'stock-prep-combo') syncStockPreparationCombo();
+  if (event.target.id === 'move-lot-combo') syncMoveLotCombo();
 });
 
 document.addEventListener('change', (event) => {
@@ -986,6 +1124,7 @@ document.addEventListener('change', (event) => {
     document.querySelectorAll('.origin-row').forEach(updateOriginLotSelect);
   }
   if (event.target.id === 'stock-prep-combo') syncStockPreparationCombo();
+  if (event.target.id === 'move-lot-combo') syncMoveLotCombo();
   if (event.target.id === 'tr-unidad') calcWeights();
   if (event.target.id === 'tr-unidad') fillLocationSelect('#tr-ubicacion', defaultLocationForUnit($('#tr-unidad')?.value));
   if (event.target.id === 'stock-unidad') {

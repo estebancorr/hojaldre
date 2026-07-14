@@ -14,13 +14,14 @@
       </div>
       <nav>
         <button class="nav active" data-view="dashboard">Inicio</button>
-        <button class="nav" data-view="catalogo">Catalogo</button>
-        <button class="nav" data-view="materias">MP</button>
-        <button class="nav" data-view="explosion">Explosion materiales</button>
-        <button class="nav" data-view="ordenes">Ordenes</button>
-        <button class="nav" data-view="preparaciones">Semiterminados</button>
+        <button class="nav" data-view="materias">Inventario MP</button>
+        <button class="nav" data-view="preparaciones">Stock ST</button>
+        <button class="nav" data-view="ubicaciones">Ubicaciones</button>
+        <button class="nav" data-view="ordenes">Produccion</button>
+        <button class="nav" data-view="explosion">Recetas</button>
         <button class="nav" data-view="trazabilidad">Trazabilidad</button>
         <button class="nav" data-view="calidad">Control calidad</button>
+        <button class="nav" data-view="catalogo">Catalogo</button>
       </nav>
     </aside>
 
@@ -144,8 +145,8 @@
               <input type="hidden" name="id_tipo_preparacion" id="stock-prep">
               <datalist id="stock-prep-options"></datalist>
             </label>
-            <label>Cantidad salida <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
-            <label>Unidad salida
+            <label>Cantidad <input name="peso_total" type="number" step="0.001" min="0.001" required></label>
+            <label>Unidad
               <select name="unidad_salida" id="stock-unidad" required></select>
             </label>
             <label>Ubicacion destino <select name="id_ubicacion" id="stock-ubicacion"></select></label>
@@ -166,21 +167,49 @@
           <h2>Lotes semiterminados disponibles</h2>
           <div id="tabla-stock"></div>
         </div>
+        <div class="panel">
+          <h2>Detalle y movimientos</h2>
+          <div id="detalle-stock-lote" class="muted">Seleccione un lote.</div>
+        </div>
+      </section>
+
+      <section id="ubicaciones" class="view">
+        <form id="move-location-form" class="panel wide">
+          <h2>Mover lote</h2>
+          <div class="form-grid">
+            <label>Lote
+              <input id="move-lot-combo" list="move-lot-options" placeholder="Escriba codigo o preparacion" autocomplete="off" required>
+              <input type="hidden" name="id_lote_prod" id="move-lot-id">
+              <datalist id="move-lot-options"></datalist>
+            </label>
+            <label>Ubicacion actual <input id="move-current-location" disabled value="Seleccione un lote"></label>
+            <label>Ubicacion destino <select name="id_ubicacion_destino" id="move-destination" required></select></label>
+            <label>Temperatura traslado (C) <input name="temperatura" type="number" step="0.1"></label>
+            <label>Responsable <input name="responsable"></label>
+          </div>
+          <label>Observaciones <textarea name="observaciones"></textarea></label>
+          <button>Registrar movimiento</button>
+        </form>
+
+        <div class="panel">
+          <h2>Lotes por ubicacion</h2>
+          <div id="tabla-ubicaciones-lotes"></div>
+        </div>
       </section>
 
       <section id="ordenes" class="view">
         <div class="workflow-strip">
           <div class="workflow-step active">
             <strong>1</strong>
-            <span>Crear orden</span>
+            <span>Orden</span>
           </div>
           <div class="workflow-step">
             <strong>2</strong>
-            <span>Registrar fase</span>
+            <span>Fase</span>
           </div>
           <div class="workflow-step">
             <strong>3</strong>
-            <span>Generar lote ST/PT</span>
+            <span>Lote ST/PT</span>
           </div>
         </div>
 
@@ -229,10 +258,11 @@
               </label>
               <label>Fase <select name="id_fase" id="tr-fase" required></select></label>
               <label id="field-temperatura"><span id="label-temperatura">Temperatura (C)</span><input name="temperatura_masa" type="number" step="0.01"></label>
-              <label id="field-peso-total"><span id="label-peso-total">Cantidad salida</span><input name="peso_total" type="number" step="0.001" min="0.001" required></label>
-              <label>Unidad salida
+              <label id="field-peso-total"><span id="label-peso-total">Cantidad</span><input name="peso_total" type="number" step="0.001" min="0.001" required></label>
+              <label>Unidad
                 <select name="unidad_salida" id="tr-unidad" required></select>
               </label>
+              <label id="field-laminados">Veces laminado <input name="cantidad_laminados" type="number" step="1" min="1"></label>
               <label>Ubicacion destino <select name="id_ubicacion" id="tr-ubicacion"></select></label>
               <label id="field-peso-porcion"><span id="label-peso-porcion">Cantidad por porcion</span><input name="peso_por_porcion" type="number" step="0.001" min="0.001"></label>
             </div>

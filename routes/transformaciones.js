@@ -56,7 +56,7 @@ const rulesByPhase = {
   'preparacion mantequilla empastada': { temperature: true },
   'preparacion de masa': { temperature: true, portion: true, timer: true },
   'empaste': { temperature: true },
-  'laminado': { temperature: true },
+  'laminado': { temperature: true, laminations: true },
   'reposo': { temperature: true },
   'formado': { portion: true },
   'congelado': { temperature: true },
@@ -93,7 +93,6 @@ function resolveOutput(data) {
 function validate(data) {
   if (!data.id_orden) throw new Error('No se puede crear lote sin orden de produccion.');
   if (!data.id_fase) throw new Error('Debe seleccionar una fase.');
-  if (!data.peso_total || num(data.peso_total) <= 0) throw new Error('La cantidad de salida debe ser mayor a cero.');
   if (!Array.isArray(data.consumos) || data.consumos.length === 0) throw new Error('Debe agregar al menos un lote de origen.');
   data.consumos.forEach((consumo) => {
     if (!consumo.cantidad_consumida || num(consumo.cantidad_consumida) <= 0) throw new Error('Las cantidades consumidas deben ser mayores a cero.');
@@ -102,8 +101,10 @@ function validate(data) {
   const output = resolveOutput(data);
   const tipoSalida = output.preparation;
   const rules = rulesByPhase[output.phase.nombre_fase.toLowerCase()] || {};
+  if (!rules.laminations && (!data.peso_total || num(data.peso_total) <= 0)) throw new Error('La cantidad de salida debe ser mayor a cero.');
   if (rules.temperature && data.temperatura_masa == null) throw new Error('Debe registrar la temperatura para esta fase.');
   if (rules.portion && (!data.peso_por_porcion || num(data.peso_por_porcion) <= 0)) throw new Error('La cantidad por porcion debe ser mayor a cero.');
+  if (rules.laminations && (!data.cantidad_laminados || num(data.cantidad_laminados) <= 0)) throw new Error('Debe registrar la cantidad de veces laminado.');
   if (rules.timer && (!data.hora_inicio || !data.hora_fin || !data.duracion_amasado_seg)) {
     throw new Error('Debe iniciar y finalizar el amasado antes de guardar.');
   }
@@ -129,8 +130,9 @@ const crearTransformacion = db.transaction((data) => {
   const fecha = today();
   const codigo = generateLotCode(output.prefix);
   const pesoEntrada = Number(data.consumos.reduce((sum, c) => sum + num(c.cantidad_consumida || 0), 0));
-  const pesoSalida = num(data.peso_total);
-  const unidadSalida = unit(data.unidad_salida);
+  const rules = rulesByPhase[output.phase.nombre_fase.toLowerCase()] || {};
+  const unidadSalida = unit(rules.laminations ? data.consumos[0]?.unidad_medida : data.unidad_salida);
+  const pesoSalida = rules.laminations ? pesoEntrada : num(data.peso_total);
   const unidadesEntrada = data.consumos.map((c) => unit(c.unidad_medida));
   const unidadesComparables = unidadesEntrada.length > 0 && unidadesEntrada.every((entrada) => entrada === unidadSalida);
   if (unidadesComparables && pesoSalida > pesoEntrada) {
@@ -139,6 +141,7 @@ const crearTransformacion = db.transaction((data) => {
   const merma = unidadesComparables ? Number((pesoEntrada - pesoSalida).toFixed(3)) : 0;
   const temperatura = data.temperatura_masa == null ? null : num(data.temperatura_masa);
   const pesoPorPorcion = data.peso_por_porcion == null ? null : num(data.peso_por_porcion);
+  const cantidadLaminados = data.cantidad_laminados == null ? null : num(data.cantidad_laminados);
   const duracion = data.duracion_amasado_seg == null ? null : num(data.duracion_amasado_seg);
 
   const loteResult = db.prepare(`
@@ -164,8 +167,8 @@ const crearTransformacion = db.transaction((data) => {
   const idLoteDestino = loteResult.lastInsertRowid;
   const regResult = db.prepare(`
     INSERT INTO REGISTRO_FASE
-    (id_orden, id_fase, id_lote_salida, id_operario, id_equipo, fecha, hora_inicio, hora_fin, temperatura_inicial, temperatura_final, temperatura_masa, peso_entrada_total, peso_salida, peso_por_porcion, duracion_amasado_seg, merma, estado, observaciones)
-    VALUES (@id_orden, @id_fase, @id_lote_salida, @id_operario, @id_equipo, @fecha, @hora_inicio, @hora_fin, @temperatura_inicial, @temperatura_final, @temperatura_masa, @peso_entrada_total, @peso_salida, @peso_por_porcion, @duracion_amasado_seg, @merma, @estado, @observaciones)
+    (id_orden, id_fase, id_lote_salida, id_operario, id_equipo, fecha, hora_inicio, hora_fin, temperatura_inicial, temperatura_final, temperatura_masa, peso_entrada_total, peso_salida, peso_por_porcion, cantidad_laminados, duracion_amasado_seg, merma, estado, observaciones)
+    VALUES (@id_orden, @id_fase, @id_lote_salida, @id_operario, @id_equipo, @fecha, @hora_inicio, @hora_fin, @temperatura_inicial, @temperatura_final, @temperatura_masa, @peso_entrada_total, @peso_salida, @peso_por_porcion, @cantidad_laminados, @duracion_amasado_seg, @merma, @estado, @observaciones)
   `).run({
     id_orden: data.id_orden,
     id_fase: data.id_fase,
@@ -181,6 +184,7 @@ const crearTransformacion = db.transaction((data) => {
     peso_entrada_total: pesoEntrada,
     peso_salida: pesoSalida,
     peso_por_porcion: pesoPorPorcion,
+    cantidad_laminados: cantidadLaminados,
     duracion_amasado_seg: duracion,
     merma,
     estado: 'COMPLETADA',

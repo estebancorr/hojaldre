@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS REGISTRO_FASE (
   peso_entrada_total DOUBLE PRECISION NOT NULL,
   peso_salida DOUBLE PRECISION NOT NULL,
   peso_por_porcion DOUBLE PRECISION,
+  cantidad_laminados INTEGER,
   duracion_amasado_seg INTEGER,
   merma DOUBLE PRECISION NOT NULL,
   estado TEXT NOT NULL DEFAULT 'COMPLETADA',
@@ -236,3 +237,4 @@ CREATE INDEX IF NOT EXISTS idx_movimiento_mp ON MOVIMIENTO_UBICACION(id_lote_mp)
 ALTER TABLE lote_materia_prima ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);
 ALTER TABLE lote_produccion ADD COLUMN IF NOT EXISTS id_ubicacion BIGINT REFERENCES ubicacion(id_ubicacion);
 ALTER TABLE consumo_lote ADD COLUMN IF NOT EXISTS temperatura_uso DOUBLE PRECISION;
+ALTER TABLE registro_fase ADD COLUMN IF NOT EXISTS cantidad_laminados INTEGER;

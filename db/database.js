@@ -88,6 +88,7 @@ function ensureRegistroFaseColumns() {
   const additions = [
     ['temperatura_masa', 'REAL'],
     ['peso_por_porcion', 'REAL'],
+    ['cantidad_laminados', 'INTEGER'],
     ['duracion_amasado_seg', 'INTEGER']
   ];
   additions.forEach(([name, type]) => {
